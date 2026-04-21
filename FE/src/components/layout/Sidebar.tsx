@@ -1,7 +1,7 @@
 import { NavLink } from "@/components/NavLink";
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, X } from "lucide-react";
 import laporanIcon from "../../../assets/laporan_icon.png";
 import piutangIcon from "../../../assets/piutang_icon.png";
 import hutangIcon from "../../../assets/hutang_icon.png";
@@ -48,7 +48,12 @@ const items = [
   { to: "/payables", label: "Hutang", icon: HutangIcon },
 ];
 
-export function Sidebar() {
+type SidebarProps = {
+  mobileOpen?: boolean;
+  onMobileOpenChange?: (open: boolean) => void;
+};
+
+export function Sidebar({ mobileOpen = false, onMobileOpenChange }: SidebarProps) {
   const location = useLocation();
   const reportActive = location.pathname.startsWith("/reports/");
   const [reportOpen, setReportOpen] = useState(reportActive);
@@ -57,13 +62,25 @@ export function Sidebar() {
     if (reportActive) setReportOpen(true);
   }, [reportActive]);
 
-  return (
-    <aside className="hidden h-screen w-60 shrink-0 border-r border-sidebar-border bg-sidebar md:flex md:flex-col">
+  useEffect(() => {
+    onMobileOpenChange?.(false);
+  }, [location.pathname, onMobileOpenChange]);
+
+  const menuContent = (
+    <>
       <div className="flex h-14 items-center gap-2 border-b border-sidebar-border px-5">
         <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-xs font-semibold text-black">
           A
         </div>
         <span className="text-sm font-semibold tracking-tight text-sidebar-foreground">Admin</span>
+        <button
+          type="button"
+          className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-white/10 hover:text-white md:hidden"
+          onClick={() => onMobileOpenChange?.(false)}
+          aria-label="Tutup menu"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto p-3">
         {items.map((item) => (
@@ -134,6 +151,28 @@ export function Sidebar() {
       <div className="border-t border-sidebar-border p-4 text-xs text-sidebar-foreground/70">
         v1.0
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      <aside className="hidden h-screen w-60 shrink-0 border-r border-sidebar-border bg-sidebar md:flex md:flex-col">
+        {menuContent}
+      </aside>
+
+      <div className={`fixed inset-0 z-40 md:hidden ${mobileOpen ? "pointer-events-auto" : "pointer-events-none"}`}>
+        <div
+          className={`absolute inset-0 bg-black/40 transition-opacity ${mobileOpen ? "opacity-100" : "opacity-0"}`}
+          onClick={() => onMobileOpenChange?.(false)}
+        />
+        <aside
+          className={`absolute inset-y-0 left-0 flex w-64 flex-col border-r border-sidebar-border bg-sidebar shadow-xl transition-transform ${
+            mobileOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+        >
+          {menuContent}
+        </aside>
+      </div>
+    </>
   );
 }
