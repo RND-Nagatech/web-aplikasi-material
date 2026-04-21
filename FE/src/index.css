@@ -1,0 +1,85 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ===== LIGHT MODE ===== */
+    --background: 210 20% 98%;
+    --foreground: 215 28% 17%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 215 28% 17%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 28% 17%;
+
+    --primary: 215 25% 27%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 22% 96%;
+    --secondary-foreground: 215 25% 27%;
+
+    --muted: 210 20% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 210 22% 96%;
+    --accent-foreground: 215 25% 27%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 71% 36%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 240 10% 6%;
+
+    --border: 214 20% 84%;
+    --input: 214 20% 84%;
+    --ring: 215 25% 27%;
+
+    --radius: 0.625rem;
+
+    /* ===== SIDEBAR ===== */
+    --sidebar-background: 215 25% 27%;
+    --sidebar-foreground: 210 20% 88%;
+    --sidebar-primary: 215 25% 27%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 215 22% 33%;
+    --sidebar-accent-foreground: 0 0% 96%;
+    --sidebar-border: 215 22% 36%;
+    --sidebar-ring: 215 25% 27%;
+  }
+
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html, body, #root {
+    @apply h-full;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Remove number input arrows */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+}

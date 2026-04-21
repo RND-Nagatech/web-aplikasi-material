@@ -1,0 +1,38 @@
+# Root .gitignore - repository-wide ignores
+
+# Node
+node_modules/
+
+# Env / secrets
+.env
+.env.*
+.env.local
+secrets.json
+credentials.json
+*.pem
+*.key
+*.p12
+
+# Build / outputs / caches
+dist/
+build/
+.vite/
+coverage/
+.cache/
+
+# OS / editors
+.DS_Store
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.log
+
+# Misc
+*.local
+
+# Frontend and backend specific folders (if present)
+/FE/node_modules/
+/FE/dist/
+/FE/.vite/
+/be/node_modules/
+/be/dist/
