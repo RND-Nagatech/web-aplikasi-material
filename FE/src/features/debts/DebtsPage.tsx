@@ -45,6 +45,7 @@ export default function DebtsPage() {
     const q = search.trim().toLowerCase();
     return q
       ? data.filter((d) => (d.customerName ?? "").toLowerCase().includes(q)
+        || (d.transactionId ?? "").toLowerCase().includes(q)
         || formatDate(d.createdAt ?? "").toLowerCase().includes(q))
       : data;
   }, [data, search]);
@@ -75,7 +76,7 @@ export default function DebtsPage() {
           <div className="relative max-w-xs flex-1">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Cari piutang…"
+              placeholder="Cari piutang / no faktur…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-8"
@@ -101,6 +102,7 @@ export default function DebtsPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
+                    <TableHead className="font-semibold text-foreground">No Faktur</TableHead>
                     <TableHead className="font-semibold text-foreground">Pelanggan</TableHead>
                     <TableHead className="font-semibold text-foreground">Tanggal</TableHead>
                     <TableHead className="text-right font-semibold text-foreground">Total</TableHead>
@@ -112,6 +114,7 @@ export default function DebtsPage() {
                 <TableBody>
                   {paginated.map((d) => (
                     <TableRow key={d.id}>
+                      <TableCell className="font-medium">{d.transactionId || "-"}</TableCell>
                       <TableCell className="font-medium">{d.customerName ?? "—"}</TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(d.createdAt)}</TableCell>
                       <TableCell className="text-right tabular-nums">{formatCurrency(d.total)}</TableCell>

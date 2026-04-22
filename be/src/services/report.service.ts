@@ -33,16 +33,12 @@ const attachCustomerName = async <T extends { kode_customer: string; nama_custom
 };
 
 export const getStockReport = async (dateFrom?: Date, dateTo?: Date) => {
-  const allActive = await Product.find({ is_active: false }).sort({ nama_produk: 1 });
+  const allActive = await Product.find({ is_active: false }).sort({ nama_produk: 1 }).lean();
 
-  const items = allActive.filter((item) => {
-    const legacyCreatedAt = (item as unknown as { createdAt?: Date }).createdAt;
-    const createdAt = parseCreatedDateGmt7(item.created_date, legacyCreatedAt);
-    if (!createdAt) return !dateFrom && !dateTo;
-    if (dateFrom && createdAt < dateFrom) return false;
-    if (dateTo && createdAt > dateTo) return false;
-    return true;
-  });
+  // Stock report should always reflect current active stock snapshot.
+  // Date filter is accepted for UI consistency, but not used to exclude products
+  // because stock is cumulative and should be visible on any selected date.
+  const items = allActive;
 
   const summary = items.reduce(
     (acc, item) => {

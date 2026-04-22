@@ -10,9 +10,9 @@ import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
 import { reportsService } from "@/services/reports";
 
 export default function ReportsPage() {
-  const stockQ = useQuery({ queryKey: ["reports", "stock"], queryFn: reportsService.stock });
-  const debtQ = useQuery({ queryKey: ["reports", "debts"], queryFn: reportsService.debts });
-  const payableQ = useQuery({ queryKey: ["reports", "payables"], queryFn: reportsService.payables });
+  const stockQ = useQuery({ queryKey: ["reports", "stock"], queryFn: () => reportsService.stock() });
+  const debtQ = useQuery({ queryKey: ["reports", "debts"], queryFn: () => reportsService.debts() });
+  const payableQ = useQuery({ queryKey: ["reports", "payables"], queryFn: () => reportsService.payables() });
 
   const isLoading = stockQ.isLoading || debtQ.isLoading || payableQ.isLoading;
   const isError = stockQ.isError || debtQ.isError || payableQ.isError;

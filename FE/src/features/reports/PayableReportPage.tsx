@@ -48,7 +48,11 @@ export default function PayableReportPage() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return q ? items.filter((it) => (it.customerName ?? "").toLowerCase().includes(q)) : items;
+    return q
+      ? items.filter((it) =>
+        (it.customerName ?? "").toLowerCase().includes(q)
+        || (it.transactionId ?? "").toLowerCase().includes(q))
+      : items;
   }, [items, search]);
 
   const totalItems = filtered.length;
@@ -116,6 +120,7 @@ export default function PayableReportPage() {
 
     const tableBody: RowInput[] = filtered.map((item, index) => [
       String(index + 1),
+      item.transactionId ?? "-",
       item.customerName ?? "-",
       formatDate(item.createdAt),
       formatCurrency(item.total),
@@ -128,7 +133,7 @@ export default function PayableReportPage() {
     const remainingSum = filtered.reduce((s, it) => s + (it.remaining ?? 0), 0);
 
     tableBody.push([
-      { content: `GRAND TOTAL : ${totalItems}`, colSpan: 2, styles: { halign: "left", fontStyle: "bold" } },
+      { content: `GRAND TOTAL : ${totalItems}`, colSpan: 3, styles: { halign: "left", fontStyle: "bold" } },
       { content: "", styles: { halign: "left" } },
       { content: formatCurrency(totalSum), styles: { halign: "right", fontStyle: "bold" } },
       { content: formatCurrency(paidSum), styles: { halign: "right", fontStyle: "bold" } },
@@ -137,7 +142,7 @@ export default function PayableReportPage() {
 
     autoTable(doc, {
       startY: 110,
-      head: [["No", "Supplier", "Tanggal", "Total", "Dibayar", "Sisa"]],
+      head: [["No", "No Faktur", "Supplier", "Tanggal", "Total", "Dibayar", "Sisa"]],
       body: tableBody,
       theme: "grid",
       styles: {
@@ -154,10 +159,10 @@ export default function PayableReportPage() {
       },
       columnStyles: {
         0: { halign: "center", cellWidth: 56 },
-        2: { halign: "center", cellWidth: 100 },
-        3: { halign: "right", cellWidth: 120 },
-        4: { halign: "right", cellWidth: 120 },
-        5: { halign: "right", cellWidth: 120 },
+        3: { halign: "center", cellWidth: 100 },
+        4: { halign: "right", cellWidth: 110 },
+        5: { halign: "right", cellWidth: 110 },
+        6: { halign: "right", cellWidth: 110 },
       },
       didParseCell: (data) => {
         const isGrandTotalRow = data.section === "body" && data.row.index === tableBody.length - 1;
@@ -186,6 +191,7 @@ export default function PayableReportPage() {
 
     worksheet.columns = [
       { width: 8 },
+      { width: 22 },
       { width: 34 },
       { width: 18 },
       { width: 18 },
@@ -193,22 +199,22 @@ export default function PayableReportPage() {
       { width: 22 },
     ];
 
-    worksheet.mergeCells("A1:F1");
+    worksheet.mergeCells("A1:G1");
     worksheet.getCell("A1").value = "LAPORAN HUTANG";
     worksheet.getCell("A1").font = { bold: true, size: 16 };
     worksheet.getCell("A1").alignment = { horizontal: "center", vertical: "middle" };
 
-    worksheet.mergeCells("A2:F2");
+    worksheet.mergeCells("A2:G2");
     worksheet.getCell("A2").value = `Tanggal : ${reportDateFrom} s/d ${reportDateTo}`;
     worksheet.getCell("A2").font = { bold: true, size: 12 };
     worksheet.getCell("A2").alignment = { horizontal: "center", vertical: "middle" };
 
-    worksheet.mergeCells("A3:F3");
+    worksheet.mergeCells("A3:G3");
     worksheet.getCell("A3").value = `${store?.nama_toko ?? "-"}`;
     worksheet.getCell("A3").font = { bold: true, size: 12 };
     worksheet.getCell("A3").alignment = { horizontal: "center", vertical: "middle" };
 
-    const headerRow = worksheet.addRow(["No", "Supplier", "Tanggal", "Total", "Dibayar", "Sisa"]);
+    const headerRow = worksheet.addRow(["No", "No Faktur", "Supplier", "Tanggal", "Total", "Dibayar", "Sisa"]);
     const headerRowNumber = headerRow.number;
     headerRow.eachCell((cell) => {
       cell.font = { bold: true };
@@ -229,6 +235,7 @@ export default function PayableReportPage() {
     filtered.forEach((item, index) => {
       const row = worksheet.addRow([
         index + 1,
+        item.transactionId ?? "-",
         item.customerName ?? "-",
         formatDate(item.createdAt),
         item.total ?? 0,
@@ -236,13 +243,13 @@ export default function PayableReportPage() {
         item.remaining ?? 0,
       ]);
       row.getCell(1).alignment = { horizontal: "center" };
-      row.getCell(3).alignment = { horizontal: "center" };
-      row.getCell(4).alignment = { horizontal: "right" };
+      row.getCell(4).alignment = { horizontal: "center" };
       row.getCell(5).alignment = { horizontal: "right" };
       row.getCell(6).alignment = { horizontal: "right" };
-      row.getCell(4).numFmt = '"Rp" #,##0';
+      row.getCell(7).alignment = { horizontal: "right" };
       row.getCell(5).numFmt = '"Rp" #,##0';
       row.getCell(6).numFmt = '"Rp" #,##0';
+      row.getCell(7).numFmt = '"Rp" #,##0';
       row.eachCell((cell) => {
         cell.border = {
           top: { style: "thin", color: { argb: "FFBFBFBF" } },
@@ -261,22 +268,23 @@ export default function PayableReportPage() {
       `GRAND TOTAL : ${totalItems}`,
       "",
       "",
+      "",
       totalSum,
       paidSum,
       remainingSum,
     ]);
-    worksheet.mergeCells(`A${grandTotalRow.number}:B${grandTotalRow.number}`);
+    worksheet.mergeCells(`A${grandTotalRow.number}:C${grandTotalRow.number}`);
     grandTotalRow.getCell(1).font = { bold: true };
     grandTotalRow.getCell(1).alignment = { horizontal: "left" };
-    grandTotalRow.getCell(4).alignment = { horizontal: "right" };
     grandTotalRow.getCell(5).alignment = { horizontal: "right" };
     grandTotalRow.getCell(6).alignment = { horizontal: "right" };
-    grandTotalRow.getCell(4).font = { bold: true };
+    grandTotalRow.getCell(7).alignment = { horizontal: "right" };
     grandTotalRow.getCell(5).font = { bold: true };
     grandTotalRow.getCell(6).font = { bold: true };
-    grandTotalRow.getCell(4).numFmt = '"Rp" #,##0';
+    grandTotalRow.getCell(7).font = { bold: true };
     grandTotalRow.getCell(5).numFmt = '"Rp" #,##0';
     grandTotalRow.getCell(6).numFmt = '"Rp" #,##0';
+    grandTotalRow.getCell(7).numFmt = '"Rp" #,##0';
     grandTotalRow.eachCell((cell) => {
       cell.fill = {
         type: "pattern",
@@ -292,7 +300,7 @@ export default function PayableReportPage() {
     });
 
     const printDateRow = worksheet.addRow([`Print Date : ${new Date().toLocaleDateString("id-ID")}`]);
-    worksheet.mergeCells(`A${printDateRow.number}:F${printDateRow.number}`);
+    worksheet.mergeCells(`A${printDateRow.number}:G${printDateRow.number}`);
     printDateRow.getCell(1).font = { italic: true, size: 10 };
     printDateRow.getCell(1).alignment = { horizontal: "left" };
 
@@ -324,7 +332,7 @@ export default function PayableReportPage() {
         <div className="flex flex-col gap-3 border-b border-border bg-background px-6 py-4 sm:flex-row sm:items-end">
           <div className="relative w-full sm:max-w-xs">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Cari supplier…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-8" />
+            <Input placeholder="Cari supplier / no faktur…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-8" />
           </div>
 
           <div className="w-full max-w-[210px]">
@@ -374,6 +382,7 @@ export default function PayableReportPage() {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50 hover:bg-muted/50">
+                      <TableHead className="font-semibold text-foreground">No Faktur</TableHead>
                       <TableHead className="font-semibold text-foreground">Supplier</TableHead>
                       <TableHead className="font-semibold text-foreground">Tanggal</TableHead>
                       <TableHead className="text-right font-semibold text-foreground">Total</TableHead>
@@ -384,6 +393,7 @@ export default function PayableReportPage() {
                   <TableBody>
                     {paginated.map((item) => (
                       <TableRow key={item.id}>
+                        <TableCell className="font-medium">{item.transactionId ?? "-"}</TableCell>
                         <TableCell className="font-medium">{item.customerName ?? "—"}</TableCell>
                         <TableCell className="text-muted-foreground">{formatDate(item.createdAt)}</TableCell>
                         <TableCell className="text-right tabular-nums">{formatCurrency(item.total)}</TableCell>

@@ -6,6 +6,7 @@ import productIcon from "../../../assets/product_icon.png";
 import transaksiIcon from "../../../assets/transaksi_icon.png";
 import piutangIcon from "../../../assets/piutang_icon.png";
 import hutangIcon from "../../../assets/hutang_icon.png";
+import emptyIcon from "../../../assets/empty.svg";
 import { Skeleton } from "@/components/ui/skeleton";
 import { dashboardService } from "@/services/dashboard";
 import { formatCurrency, formatNumber } from "@/lib/format";
@@ -181,8 +182,11 @@ export default function DashboardPage() {
                             </TableRow>
                           ) : !(data?.due.piutang.length) ? (
                             <TableRow>
-                              <TableCell colSpan={5} className="h-16 text-center text-sm text-muted-foreground">
-                                Tidak ada data piutang jatuh tempo
+                              <TableCell colSpan={5} className="h-44">
+                                <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
+                                  <img src={emptyIcon} alt="empty" className="h-64 w-64 object-contain opacity-80" />
+                                  <span className="text-xs">Tidak ada data piutang jatuh tempo</span>
+                                </div>
                               </TableCell>
                             </TableRow>
                           ) : (
@@ -225,8 +229,11 @@ export default function DashboardPage() {
                             </TableRow>
                           ) : !(data?.due.hutang.length) ? (
                             <TableRow>
-                              <TableCell colSpan={5} className="h-16 text-center text-sm text-muted-foreground">
-                                Tidak ada data hutang jatuh tempo
+                              <TableCell colSpan={5} className="h-44">
+                                <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
+                                  <img src={emptyIcon} alt="empty" className="h-64 w-64 object-contain opacity-80" />
+                                  <span className="text-xs">Tidak ada data hutang jatuh tempo</span>
+                                </div>
                               </TableCell>
                             </TableRow>
                           ) : (

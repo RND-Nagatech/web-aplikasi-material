@@ -45,7 +45,7 @@ import belumLunasIcon from "../../../assets/belum_lunas_icon.png";
 import reprintIcon from "../../../assets/reprint_icon.png";
 
 const schema = z.object({
-  type: z.enum(["sale", "purchase"]),
+  type: z.enum(["sale", "purchase"]).optional(),
   customerId: z.string().optional(),
   customerName: z.string().trim().min(1, "Nama customer wajib diisi"),
   customerPhone: z.string().optional(),
@@ -336,6 +336,7 @@ export default function TransactionsPage() {
     return q
       ? txs.filter((t) => (
         (t.customerName ?? "").toLowerCase().includes(q)
+        || (t.invoiceNumber ?? "").toLowerCase().includes(q)
         || (t.type ?? "").toLowerCase().includes(q)
         || formatDate(t.createdAt ?? "").toLowerCase().includes(q)
       ))
@@ -430,6 +431,7 @@ export default function TransactionsPage() {
                 <TableHeader>
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
                     <TableHead className="font-semibold text-foreground">Tanggal</TableHead>
+                    <TableHead className="font-semibold text-foreground">No Faktur</TableHead>
                     <TableHead className="font-semibold text-foreground">Tipe</TableHead>
                     <TableHead className="font-semibold text-foreground">Pelanggan</TableHead>
                     <TableHead className="text-right font-semibold tabular-nums">Item</TableHead>
@@ -443,6 +445,7 @@ export default function TransactionsPage() {
                   {paginated.map((t) => (
                     <TableRow key={t.id}>
                       <TableCell className="text-muted-foreground">{formatDate(t.createdAt)}</TableCell>
+                      <TableCell className="font-medium">{t.invoiceNumber ?? "-"}</TableCell>
                       <TableCell>
                         <Badge variant={t.type === "sale" ? "default" : "secondary"}>{typeLabel(t.type)}</Badge>
                       </TableCell>
@@ -463,7 +466,7 @@ export default function TransactionsPage() {
                               <MoreVertical className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent side="left" align="start" sideOffset={6} className="min-w-0 w-10 p-1">
+                          <DropdownMenuContent side="left" align="start" sideOffset={6} className="w-10 min-w-0 p-1">
                             <DropdownMenuItem onClick={() => void handleReprintNota(t)} className="flex h-8 w-8 justify-center p-0">
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -578,12 +581,12 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
   const [draftItem, setDraftItem] = useState<{
     productId: string;
     priceType: "wholesale" | "retail";
-    quantity: number;
+    quantity: number | "";
     unitPrice: number;
   }>({
     productId: "",
     priceType: "retail",
-    quantity: 1,
+    quantity: "",
     unitPrice: 0,
   });
 
@@ -638,7 +641,7 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
   useEffect(() => {
     if (open) {
       form.reset({
-        type: "sale",
+        type: undefined,
         customerId: undefined,
         customerName: "",
         customerPhone: "",
@@ -651,7 +654,7 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
       setPaymentEntryOpen(false);
       setCustomerFilterOpen(false);
       setDraftPaid(0);
-      setDraftItem({ productId: "", priceType: "retail", quantity: 1, unitPrice: 0 });
+      setDraftItem({ productId: "", priceType: "retail", quantity: "", unitPrice: 0 });
       setPickerLoaded(false);
       setFilterName("");
       setFilterPhone("");
@@ -704,17 +707,18 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
       toast.error("Pilih produk terlebih dahulu");
       return;
     }
-    if (!draftItem.quantity || draftItem.quantity < 1) {
+    const qty = Number(draftItem.quantity);
+    if (!qty || Number.isNaN(qty) || qty < 1) {
       toast.error("Maaf data quantity harus diisi");
       return;
     }
     append({
       productId: draftItem.productId,
-      quantity: draftItem.quantity,
+      quantity: qty,
       priceType: draftItem.priceType,
       unitPrice: draftItem.unitPrice,
     });
-    setDraftItem({ productId: "", priceType: "retail", quantity: 1, unitPrice: 0 });
+    setDraftItem({ productId: "", priceType: "retail", quantity: "", unitPrice: 0 });
   };
 
   return (
@@ -728,6 +732,10 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
           className="flex flex-1 flex-col overflow-hidden"
           onSubmit={form.handleSubmit(
             async (values) => {
+              if (!values.type) {
+                toast.error("Type transaksi belum dipilih");
+                return;
+              }
               await onSubmit({
                 type: values.type,
                 customerId: values.customerId,
@@ -744,8 +752,17 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
               });
             },
             (errors) => {
+              const hasTypeError = Boolean(errors.type);
               const hasQuantityError = Array.isArray(errors.items)
                 && errors.items.some((itemErr) => Boolean(itemErr?.quantity));
+              if (hasTypeError && hasQuantityError) {
+                toast.error("Type transaksi belum dipilih dan quantity belum diisi");
+                return;
+              }
+              if (hasTypeError) {
+                toast.error("Type transaksi belum dipilih");
+                return;
+              }
               if (hasQuantityError) {
                 toast.error("Maaf data quantity harus diisi");
                 return;
@@ -759,7 +776,7 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
               <div className="space-y-1">
                 <Label>Tipe</Label>
                 <Select value={type} onValueChange={(v) => form.setValue("type", v as "sale" | "purchase")}>
-                  <SelectTrigger className="rounded-none"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="rounded-none"><SelectValue placeholder="Silahkan pilih type transaksi" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="sale">Penjualan</SelectItem>
                     <SelectItem value="purchase">Pembelian</SelectItem>
@@ -921,7 +938,7 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
               </div>
             </div>
             <div className="flex justify-start">
-              <Button type="button" className="rounded-none border border-border bg-background text-foreground hover:bg-muted" onClick={() => setCustomerFilterOpen(true)}>
+              <Button type="button" className="rounded-none bg-blue-600 text-white hover:bg-blue-700" onClick={() => setCustomerFilterOpen(true)}>
                 Filter Data Customer
               </Button>
             </div>
@@ -1022,8 +1039,9 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
                 <Input
                   type="number"
                   min="1"
+                  placeholder="qty"
                   value={draftItem.quantity}
-                  onChange={(e) => setDraftItem((prev) => ({ ...prev, quantity: Number(e.target.value) || 0 }))}
+                  onChange={(e) => setDraftItem((prev) => ({ ...prev, quantity: e.target.value === "" ? "" : Number(e.target.value) || "" }))}
                 />
               </div>
               <div className="md:col-span-2">
@@ -1179,7 +1197,7 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
 
             <div className="max-w-xs">
               <Input
-                placeholder={pickerLoaded ? "Cari data..." : "Jalankan filter dulu (Enter)"}
+                placeholder={pickerLoaded ? "Cari data..." : "Isi nama/no/alamat lalu tekan enter (Enter)"}
                 value={filterSearch}
                 onChange={(e) => setFilterSearch(e.target.value)}
                 className="w-full"
