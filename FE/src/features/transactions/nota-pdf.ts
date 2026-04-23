@@ -249,7 +249,8 @@ export const downloadNotaPdf = async (params: {
   const pageH = doc.internal.pageSize.getHeight();
   const margin = 12;
   const sectionsPerPage = 3;
-  const sectionH = (pageH - margin * 2) / 3;
+  const sectionGap = 10;
+  const sectionH = (pageH - margin * 2 - sectionGap * (sectionsPerPage - 1)) / sectionsPerPage;
   const customerPhone = transaction.customerPhone?.trim() || "-";
   const customerAddress = transaction.customerAddress?.trim() || "-";
   const customerName = transaction.customerName?.trim() || "-";
@@ -262,7 +263,7 @@ export const downloadNotaPdf = async (params: {
       doc.addPage();
     }
     const positionInPage = idx % sectionsPerPage;
-    const y = margin + positionInPage * sectionH;
+    const y = margin + positionInPage * (sectionH + sectionGap);
     drawNotaSection(doc, {
       x: margin,
       y,

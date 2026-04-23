@@ -465,7 +465,7 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="mx-4 flex h-[min(90vh,860px)] w-full max-w-5xl flex-col overflow-hidden p-0">
+        <DialogContent className="flex h-[min(96vh,860px)] max-w-5xl flex-col overflow-hidden p-0">
         <DialogHeader className="border-b border-border px-4 py-4 sm:px-6">
           <DialogTitle>Transaksi baru</DialogTitle>
         </DialogHeader>
@@ -543,22 +543,24 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
 
             <div className="space-y-3 border border-border p-3">
               <p className="text-sm font-semibold">Data Customer</p>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nama Customer</TableHead>
-                    <TableHead>No Hp</TableHead>
-                    <TableHead>Alamat</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow>
-                    <TableCell>{form.watch("customerName") || "-"}</TableCell>
-                    <TableCell>{form.watch("customerPhone") || "-"}</TableCell>
-                    <TableCell>{form.watch("customerAddress") || "-"}</TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
+              <div className="overflow-x-auto">
+                <Table className="min-w-[560px] md:min-w-0">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nama Customer</TableHead>
+                      <TableHead>No Hp</TableHead>
+                      <TableHead>Alamat</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell>{form.watch("customerName") || "-"}</TableCell>
+                      <TableCell>{form.watch("customerPhone") || "-"}</TableCell>
+                      <TableCell>{form.watch("customerAddress") || "-"}</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
               {form.formState.errors.customerName && (
                 <p className="text-xs text-destructive">{form.formState.errors.customerName.message}</p>
               )}
@@ -569,8 +571,8 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
                 <p className="text-sm font-semibold">Data Barang ({fields.length})</p>
                 <p className="text-sm text-muted-foreground">Total: {formatCurrency(total)}</p>
               </div>
-              <div className="max-h-64 overflow-y-auto">
-                <Table>
+              <div className="max-h-64 overflow-y-auto overflow-x-auto">
+                <Table className="min-w-[680px] md:min-w-0">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Produk</TableHead>
@@ -620,9 +622,9 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
           </div>
 
           <div className="border-t border-border bg-background px-4 py-4 shadow-[0_-8px_16px_-12px_rgba(0,0,0,0.25)] sm:px-6">
-            <div className="flex items-end justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div className="text-sm text-muted-foreground">Pastikan data customer, item, dan pembayaran sudah benar.</div>
-              <div className="text-right">
+              <div className="text-left sm:text-right">
                 <div className="text-xs text-muted-foreground">Total</div>
                 <div className="text-2xl font-semibold tabular-nums">{formatCurrency(total)}</div>
               </div>
@@ -638,7 +640,7 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
       </Dialog>
 
       <Dialog open={customerEntryOpen} onOpenChange={setCustomerEntryOpen}>
-        <DialogContent className="mx-4 max-h-[90vh] w-full max-w-4xl overflow-hidden p-0">
+        <DialogContent className="max-h-[96vh] max-w-4xl overflow-hidden p-0">
           <DialogHeader className="border-b border-border px-4 py-4 sm:px-6">
             <DialogTitle>Data Customer</DialogTitle>
           </DialogHeader>
@@ -683,8 +685,8 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
                 Filter Data Customer
               </Button>
             </div>
-            <div className="border border-border">
-              <Table>
+            <div className="overflow-x-auto border border-border">
+              <Table className="min-w-[560px] md:min-w-0">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Nama Customer</TableHead>
@@ -735,7 +737,7 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
       </Dialog>
 
       <Dialog open={itemEntryOpen} onOpenChange={setItemEntryOpen}>
-        <DialogContent className="mx-4 max-h-[90vh] w-full max-w-5xl overflow-hidden p-0">
+        <DialogContent className="max-h-[96vh] max-w-5xl overflow-hidden p-0">
           <DialogHeader className="border-b border-border px-4 py-4 sm:px-6">
             <DialogTitle>Tambah Barang</DialogTitle>
           </DialogHeader>
@@ -793,14 +795,14 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
                 />
               </div>
               <div className="flex items-end justify-end md:col-span-2">
-                <Button type="button" className="rounded-none" onClick={onAddItem}>
+                <Button type="button" className="w-full rounded-none md:w-auto" onClick={onAddItem}>
                   <Plus className="mr-1 h-4 w-4" /> Tambah item
                 </Button>
               </div>
             </div>
 
-            <div className="max-h-[45vh] overflow-y-auto border border-border">
-              <Table>
+            <div className="max-h-[45vh] overflow-y-auto overflow-x-auto border border-border">
+              <Table className="min-w-[720px] md:min-w-0">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Produk</TableHead>
@@ -853,7 +855,7 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
       </Dialog>
 
       <Dialog open={paymentEntryOpen} onOpenChange={setPaymentEntryOpen}>
-        <DialogContent className="mx-4 w-full max-w-md">
+        <DialogContent className="max-h-[96vh] max-w-md overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Bayar Sekarang</DialogTitle>
           </DialogHeader>
@@ -885,7 +887,7 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
       </Dialog>
 
       <Dialog open={customerFilterOpen} onOpenChange={setCustomerFilterOpen}>
-        <DialogContent className="mx-4 max-h-[90vh] w-full max-w-6xl overflow-hidden p-0">
+        <DialogContent className="max-h-[96vh] max-w-6xl overflow-hidden p-0">
           <DialogHeader className="border-b border-border px-4 py-4 sm:px-6">
             <DialogTitle>Filter Data Customer</DialogTitle>
           </DialogHeader>
@@ -952,8 +954,8 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
               />
             </div>
 
-            <div className="max-h-[45vh] overflow-y-auto border border-border">
-              <Table>
+            <div className="max-h-[45vh] overflow-y-auto overflow-x-auto border border-border">
+              <Table className="min-w-[760px] md:min-w-0">
                 <TableHeader>
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
                     <TableHead className="w-14" />

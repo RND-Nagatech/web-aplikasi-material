@@ -11,7 +11,7 @@ import { TableSkeleton } from "@/components/common/TableSkeleton";
 import { TableFetchProgress } from "@/components/common/TableFetchProgress";
 import { TablePagination } from "@/components/common/TablePagination";
 import { ErrorState } from "@/components/common/States";
-import { formatCurrency, formatNumber } from "@/lib/format";
+import { formatCurrency, formatNumber, getTodayInputDate } from "@/lib/format";
 import { reportsService } from "@/services/reports";
 import { storesService } from "@/services/stores";
 import type { RowInput } from "jspdf-autotable";
@@ -21,7 +21,7 @@ import searchDataIcon from "../../../assets/cari data.svg";
 import emptyDataIcon from "../../../assets/empty.svg";
 
 const DEFAULT_PAGE_SIZE = 10;
-const TODAY = new Date().toISOString().slice(0, 10);
+const TODAY = getTodayInputDate();
 
 export default function StockReportPage() {
   const [dateFrom, setDateFrom] = useState(TODAY);

@@ -24,25 +24,29 @@ export const drawStandardReportHeader = (
     title: string;
     dateFrom: string;
     dateTo: string;
+    leftInset?: number;
+    rightInset?: number;
   },
 ): void => {
-  const { store, title, dateFrom, dateTo } = options;
+  const {
+    store, title, dateFrom, dateTo, leftInset = 40, rightInset = 40,
+  } = options;
   const pageWidth = doc.internal.pageSize.getWidth();
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
-  doc.text((store?.nama_toko ?? "-").toUpperCase(), 40, 50);
+  doc.text((store?.nama_toko ?? "-").toUpperCase(), leftInset, 50);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(11);
-  doc.text(`Alamat : ${(store?.alamat ?? "-").toUpperCase()}`, 40, 70);
-  doc.text(`No HP  : ${store?.no_hp ?? "-"}`, 40, 86);
+  doc.text(`Alamat : ${(store?.alamat ?? "-").toUpperCase()}`, leftInset, 70);
+  doc.text(`No HP  : ${store?.no_hp ?? "-"}`, leftInset, 86);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
-  doc.text(title, pageWidth - 40, 50, { align: "right" });
+  doc.text(title, pageWidth - rightInset, 50, { align: "right" });
   doc.setFontSize(13);
-  doc.text(`TANGGAL : ${dateFrom} s/d ${dateTo}`, pageWidth - 40, 72, { align: "right" });
+  doc.text(`TANGGAL : ${dateFrom} s/d ${dateTo}`, pageWidth - rightInset, 72, { align: "right" });
 };
 
 export const renderReportTablePdf = (

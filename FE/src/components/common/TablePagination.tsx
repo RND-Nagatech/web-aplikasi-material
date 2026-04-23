@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface TablePaginationProps {
   page: number;
@@ -64,20 +65,24 @@ export function TablePagination({
         {onPageSizeChange && (
           <label className="flex items-center gap-2 text-xs text-muted-foreground sm:text-sm">
             <span>Per halaman</span>
-            <select
-              className="h-8 rounded-md border border-input bg-background px-2 text-foreground"
-              value={pageSize}
-              onChange={(e) => {
-                const next = Number(e.target.value);
+            <Select
+              value={String(pageSize)}
+              onValueChange={(value) => {
+                const next = Number(value);
                 if (Number.isFinite(next) && next > 0) onPageSizeChange(next);
               }}
             >
+              <SelectTrigger className="h-8 w-[76px] rounded-md px-2 text-foreground">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent side="bottom" align="start" sideOffset={4} className="z-[70] min-w-[76px]">
               {pageSizeOptions.map((option) => (
-                <option key={option} value={option}>
+                <SelectItem key={option} value={String(option)}>
                   {option}
-                </option>
+                </SelectItem>
               ))}
-            </select>
+              </SelectContent>
+            </Select>
           </label>
         )}
 

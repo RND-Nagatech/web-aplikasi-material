@@ -12,7 +12,7 @@ import { TableSkeleton } from "@/components/common/TableSkeleton";
 import { TableFetchProgress } from "@/components/common/TableFetchProgress";
 import { TablePagination } from "@/components/common/TablePagination";
 import { EmptyState, ErrorState } from "@/components/common/States";
-import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
+import { formatCurrency, formatDate, formatNumber, getTodayInputDate } from "@/lib/format";
 import { reportsService } from "@/services/reports";
 import { storesService } from "@/services/stores";
 import type { RowInput } from "jspdf-autotable";
@@ -22,7 +22,7 @@ import searchDataIcon from "../../../assets/cari data.svg";
 import emptyDataIcon from "../../../assets/empty.svg";
 
 const DEFAULT_PAGE_SIZE = 10;
-const TODAY = new Date().toISOString().slice(0, 10);
+const TODAY = getTodayInputDate();
 
 export default function PayableReportPage() {
   const [dateFrom, setDateFrom] = useState(TODAY);
@@ -77,11 +77,7 @@ export default function PayableReportPage() {
     }
 
     setFilterError("");
-    // Convert local date strings to UTC ISO start/end to avoid timezone shifts on backend
-    const toUtcStart = (d: string) => new Date(`${d}T00:00:00`).toISOString();
-    const toUtcEnd = (d: string) => new Date(`${d}T23:59:59.999`).toISOString();
-
-    const nextFilter = { dateFrom: toUtcStart(dateFrom), dateTo: toUtcEnd(dateTo) };
+    const nextFilter = { dateFrom, dateTo };
 
     const isSameFilter = submittedFilter?.dateFrom === nextFilter.dateFrom && submittedFilter?.dateTo === nextFilter.dateTo;
     if (isSameFilter) {
@@ -97,8 +93,9 @@ export default function PayableReportPage() {
   const exportPdf = async () => {
     const pdf = await getPdfEngine();
     const store = storesQ.data?.[0];
-    const reportDateFrom = (submittedFilter?.dateFrom ?? dateFrom).slice(0, 10);
-    const reportDateTo = (submittedFilter?.dateTo ?? dateTo).slice(0, 10);
+    const reportDateFrom = submittedFilter?.dateFrom ?? dateFrom;
+    const reportDateTo = submittedFilter?.dateTo ?? dateTo;
+    const pdfSideInset = 34;
 
     const doc = pdf.createLandscapePdf();
     pdf.drawStandardReportHeader(doc, {
@@ -106,6 +103,8 @@ export default function PayableReportPage() {
       title: "LAPORAN HUTANG",
       dateFrom: reportDateFrom,
       dateTo: reportDateTo,
+      leftInset: pdfSideInset,
+      rightInset: pdfSideInset,
     });
 
     const tableBody: RowInput[] = filtered.map((item, index) => [
@@ -137,6 +136,7 @@ export default function PayableReportPage() {
       head: [["No", "No Faktur", "Supplier", "Kode Customer", "Tanggal", "Total", "Dibayar", "Kembalian", "Sisa"]],
       body: tableBody,
       autoTableOptions: {
+        margin: { left: pdfSideInset, right: pdfSideInset },
         styles: {
           fontSize: 9,
           cellPadding: 4,
@@ -147,10 +147,10 @@ export default function PayableReportPage() {
           2: { halign: "left", cellWidth: 110 }, // Supplier (dipanjangkan)
           3: { halign: "left", cellWidth: 72 },
           4: { halign: "center", cellWidth: 68 }, // Tanggal (diperkecil)
-          5: { halign: "right", cellWidth: 95 }, // Nominal dibuat lebih aman
-          6: { halign: "right", cellWidth: 95 },
-          7: { halign: "right", cellWidth: 95 },
-          8: { halign: "right", cellWidth: 95 },
+          5: { halign: "right", cellWidth: 103 }, // Nominal diperlebar agar sejajar kanan header
+          6: { halign: "right", cellWidth: 103 },
+          7: { halign: "right", cellWidth: 103 },
+          8: { halign: "right", cellWidth: 103 },
         },
       },
     });
@@ -161,8 +161,8 @@ export default function PayableReportPage() {
 
   const exportExcel = async () => {
     const store = storesQ.data?.[0];
-    const reportDateFrom = (submittedFilter?.dateFrom ?? dateFrom).slice(0, 10);
-    const reportDateTo = (submittedFilter?.dateTo ?? dateTo).slice(0, 10);
+    const reportDateFrom = submittedFilter?.dateFrom ?? dateFrom;
+    const reportDateTo = submittedFilter?.dateTo ?? dateTo;
     await exportExcelWithWorker({
       kind: "payable",
       fileName: "LAPORAN HUTANG.xlsx",

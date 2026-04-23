@@ -12,7 +12,7 @@ import { TableSkeleton } from "@/components/common/TableSkeleton";
 import { TableFetchProgress } from "@/components/common/TableFetchProgress";
 import { TablePagination } from "@/components/common/TablePagination";
 import { ErrorState } from "@/components/common/States";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, getTodayInputDate } from "@/lib/format";
 import { reportsService } from "@/services/reports";
 import { storesService } from "@/services/stores";
 import type { FinanceReportType } from "@/types";
@@ -23,7 +23,7 @@ import searchDataIcon from "../../../assets/cari data.svg";
 import emptyDataIcon from "../../../assets/empty.svg";
 
 const DEFAULT_PAGE_SIZE = 10;
-const TODAY = new Date().toISOString().slice(0, 10);
+const TODAY = getTodayInputDate();
 type AutoTableDoc = {
   lastAutoTable?: {
     finalY?: number;
@@ -252,13 +252,13 @@ export default function FinanceReportPage() {
           <h1 className="text-lg font-semibold">Laporan Keuangan</h1>
         </div>
 
-        <div className="flex flex-col gap-3 border-b border-border bg-background px-4 py-4 sm:px-6 sm:flex-row sm:items-end">
-          <div className="relative w-full sm:max-w-xs">
+        <div className="grid grid-cols-1 gap-3 border-b border-border bg-background px-4 py-4 sm:grid-cols-2 sm:px-6 lg:grid-cols-12 lg:items-end">
+          <div className="relative w-full sm:col-span-2 lg:col-span-3">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input placeholder="Cari data…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-8" />
           </div>
 
-          <div className="w-full sm:max-w-[170px]">
+          <div className="w-full lg:col-span-2">
             <label className="mb-1 block text-xs text-muted-foreground">Tipe Laporan</label>
             <Select value={reportType} onValueChange={(v) => setReportType(v as FinanceReportType)}>
               <SelectTrigger className="rounded-none"><SelectValue /></SelectTrigger>
@@ -269,15 +269,18 @@ export default function FinanceReportPage() {
             </Select>
           </div>
 
-          <div className="w-full sm:max-w-[210px]">
+          <div className="w-full lg:col-span-2">
             <label htmlFor="dateFrom" className="mb-1 block text-xs text-muted-foreground">Tanggal Awal</label>
             <Input id="dateFrom" type="date" value={dateFrom} max={dateTo || undefined} onChange={(e) => setDateFrom(e.target.value)} />
           </div>
-          <div className="w-full sm:max-w-[210px]">
+          <div className="w-full lg:col-span-2">
             <label htmlFor="dateTo" className="mb-1 block text-xs text-muted-foreground">Tanggal Akhir</label>
             <Input id="dateTo" type="date" value={dateTo} min={dateFrom || undefined} onChange={(e) => setDateTo(e.target.value)} />
           </div>
-          <Button className="rounded-none" onClick={onSearch}>Cari Data</Button>
+          <div className="w-full lg:col-span-2">
+            <label className="mb-1 block text-xs text-transparent select-none">Aksi</label>
+            <Button className="w-full rounded-none" onClick={onSearch}>Cari Data</Button>
+          </div>
         </div>
 
         {filterError && (
@@ -304,7 +307,8 @@ export default function FinanceReportPage() {
               </div>
             ) : (
               <>
-                <Table>
+                <div className="overflow-x-auto">
+                <Table className={reportType === "detail" ? "min-w-[760px] md:min-w-0" : "min-w-[560px] md:min-w-0"}>
                   <TableHeader>
                     <TableRow className="bg-muted/50 hover:bg-muted/50">
                       <TableHead className="font-semibold text-foreground">Kategori</TableHead>
@@ -324,6 +328,7 @@ export default function FinanceReportPage() {
                     ))}
                   </TableBody>
                 </Table>
+                </div>
                 <div className="flex items-center justify-between border-t border-border bg-background px-4 py-3 sm:px-6">
                   <p className="text-sm font-medium">Total Record: {totalItems}</p>
                 </div>
@@ -342,11 +347,11 @@ export default function FinanceReportPage() {
             <>
               <div className="mt-4 flex justify-end">
                 <div className="w-full max-w-md space-y-1 text-right">
-                  <p className="text-2xl">Saldo Awal : {formatCurrency(financeQ.data?.summary.saldoAwal ?? 0)}</p>
-                  <p className="text-2xl">Uang Masuk : {formatCurrency(financeQ.data?.summary.totalUangMasuk ?? 0)}</p>
-                  <p className="text-2xl">Uang Keluar : {formatCurrency(financeQ.data?.summary.totalUangKeluar ?? 0)}</p>
+                  <p className="text-xl sm:text-2xl">Saldo Awal : {formatCurrency(financeQ.data?.summary.saldoAwal ?? 0)}</p>
+                  <p className="text-xl sm:text-2xl">Uang Masuk : {formatCurrency(financeQ.data?.summary.totalUangMasuk ?? 0)}</p>
+                  <p className="text-xl sm:text-2xl">Uang Keluar : {formatCurrency(financeQ.data?.summary.totalUangKeluar ?? 0)}</p>
                   <hr className="my-2 border-border" />
-                  <p className="text-2xl font-semibold">Saldo Akhir : {formatCurrency(financeQ.data?.summary.saldoAkhir ?? 0)}</p>
+                  <p className="text-xl font-semibold sm:text-2xl">Saldo Akhir : {formatCurrency(financeQ.data?.summary.saldoAkhir ?? 0)}</p>
                 </div>
               </div>
               <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
