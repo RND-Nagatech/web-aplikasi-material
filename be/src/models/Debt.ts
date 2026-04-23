@@ -8,6 +8,7 @@ export interface IDebt extends Document {
   no_faktur_jual: string;
   total: number;
   dibayar: number;
+  kembalian: number;
   sisa: number;
   created_date: string;
   created_date_ts?: Date;
@@ -20,6 +21,7 @@ const DebtSchema = new Schema<IDebt>(
     no_faktur_jual: { type: String, required: true, trim: true, set: toUpperTrim },
     total: { type: Number, required: true, min: 0 },
     dibayar: { type: Number, default: 0, min: 0 },
+    kembalian: { type: Number, default: 0, min: 0 },
     sisa: { type: Number, required: true, min: 0 },
     created_date: { type: String, required: true },
     created_date_ts: { type: Date, required: false },

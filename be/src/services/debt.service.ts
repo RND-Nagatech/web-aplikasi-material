@@ -15,6 +15,7 @@ type DebtListItem = {
   total: number;
   dibayar: number;
   sisa: number;
+  kembalian?: number;
   created_date: string;
   customer_name: string;
 };
@@ -56,7 +57,18 @@ export const getAllDebts = async (query: PaginationQuery): Promise<PaginatedResu
     Debt.countDocuments(where),
   ]);
 
-  const items = await attachCustomerName(rawItems) as DebtListItem[];
+  let items = (await attachCustomerName(rawItems)) as DebtListItem[];
+
+  // Attach kembalian from SaleTransaction (if exists)
+  const invoiceNos = items.map((it) => it.no_faktur_jual).filter(Boolean);
+  if (invoiceNos.length) {
+    const sales = await SaleTransaction.find({ no_faktur_jual: { $in: invoiceNos } })
+      .select('no_faktur_jual kembalian')
+      .lean();
+    const kembalianByInvoice = new Map(sales.map((s) => [s.no_faktur_jual, s.kembalian ?? 0]));
+    items = items.map((it) => ({ ...it, kembalian: kembalianByInvoice.get(it.no_faktur_jual) ?? 0 }));
+  }
+
   return buildPaginatedResult(items, total, page, limit);
 };
 
@@ -73,20 +85,29 @@ export const processDebtPayment = async (body: DebtPaymentBody): Promise<IDebt> 
       throw createError('Payment amount must be greater than zero', 400);
     }
 
-    if (body.amount > debt.sisa) {
-      throw createError(`Payment amount exceeds remaining debt of ${debt.sisa}`, 400);
-    }
+    // Allow overpayment: apply only up to remaining debt and treat the rest as kembalian
+    const applied = Math.max(0, Math.min(body.amount, debt.sisa));
+    const kembalian = Math.max(0, body.amount - applied);
 
+    // Record full input as 'dibayar' so table shows what user entered,
+    // but only apply up to remaining for reducing the outstanding (`sisa`).
     debt.dibayar += body.amount;
-    debt.sisa -= body.amount;
+    // persist kembalian on debt record as cumulative change amount
+    // so tt_piutang contains kembalian for easy querying / UI
+    // (kembalian may be 0 when no overpayment)
+    // use parentheses to ensure correct evaluation
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (debt as any).kembalian = (((debt as any).kembalian ?? 0) + kembalian);
+    debt.sisa = Math.max(0, debt.sisa - applied);
 
     const savedDebt = await debt.save({ session });
 
     const updatedSale = await SaleTransaction.findOneAndUpdate(
       { no_faktur_jual: savedDebt.no_faktur_jual },
       {
-        dibayar: savedDebt.dibayar,
-        status: savedDebt.sisa > 0 ? 'PIUTANG' : 'LUNAS',
+        // increment stored dibayar by full input so transaction record reflects paid amount entered
+        $inc: { dibayar: body.amount, kembalian },
+        $set: { status: savedDebt.sisa > 0 ? 'PIUTANG' : 'LUNAS' },
       },
       { new: true, session }
     );
@@ -95,10 +116,16 @@ export const processDebtPayment = async (body: DebtPaymentBody): Promise<IDebt> 
       throw createError(`Sale transaction ${savedDebt.no_faktur_jual} not found`, 404);
     }
 
-    await recordCashMovement(
-      { type: 'jual', amount: body.amount },
-      { session, now: new Date() }
-    );
+    // record only the applied amount as cash in, and record kembalian as cash out if present
+    if (applied > 0) {
+      await recordCashMovement(
+        { type: 'jual', amount: applied },
+        { session, now: new Date() }
+      );
+    }
+    if (kembalian > 0) {
+      await recordCashMovement({ direction: 'out', amount: kembalian }, { session, now: new Date() });
+    }
     return savedDebt;
   });
 };

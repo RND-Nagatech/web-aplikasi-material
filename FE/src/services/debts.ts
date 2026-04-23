@@ -13,6 +13,7 @@ interface ApiDebt {
   total: number;
   paid?: number;
   dibayar?: number;
+  kembalian?: number;
   sisa?: number;
   remaining?: number;
   createdAt?: string;
@@ -37,6 +38,7 @@ const mapDebt = (item: ApiDebt): Debt => ({
       : item.transaction?._id ?? ""),
   total: item.total,
   paid: item.dibayar ?? item.paid ?? 0,
+  change: item.kembalian ?? 0,
   remaining: item.sisa ?? item.remaining ?? 0,
   createdAt: item.created_date ?? item.createdAt ?? "",
 });

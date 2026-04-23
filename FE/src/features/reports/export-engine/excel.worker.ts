@@ -159,20 +159,19 @@ const buildDebtPayableWorkbook = (
   payload: Extract<BuildExcelPayload, { kind: "debt" | "payable" }>
 ): ExcelJS.Workbook => {
   const { workbook, worksheet } = createWorkbook(payload.title);
-  worksheet.columns = [{ width: 8 }, { width: 22 }, { width: 30 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 22 }];
+  worksheet.columns = [{ width: 8 }, { width: 22 }, { width: 30 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 22 }];
   addStandardExcelHeader(worksheet, {
     title: payload.title,
     dateFrom: payload.dateFrom,
     dateTo: payload.dateTo,
     storeName: payload.storeName,
-    totalCols: 8,
+    totalCols: 9,
   });
 
   const customerLabel = payload.kind === "payable" ? "Supplier" : "Pelanggan";
-  const headerRow = worksheet.addRow(["No", "No Faktur", customerLabel, "Kode Customer", "Tanggal", "Total", "Dibayar", "Sisa"]);
+  const headerRow = worksheet.addRow(["No", "No Faktur", customerLabel, "Kode Customer", "Tanggal", "Total", "Dibayar", "Kembalian", "Sisa"]);
   const headerRowNumber = headerRow.number;
   styleHeaderRow(headerRow);
-
   payload.items.forEach((item: DebtExcelItem | PayableExcelItem, index: number) => {
     const row = worksheet.addRow([
       index + 1,
@@ -182,6 +181,7 @@ const buildDebtPayableWorkbook = (
       formatDate(item.createdAt),
       item.total ?? 0,
       item.paid ?? 0,
+      item.change ?? 0,
       item.remaining ?? 0,
     ]);
     row.getCell(1).alignment = { horizontal: "center" };
@@ -189,34 +189,40 @@ const buildDebtPayableWorkbook = (
     row.getCell(6).alignment = { horizontal: "right" };
     row.getCell(7).alignment = { horizontal: "right" };
     row.getCell(8).alignment = { horizontal: "right" };
+    row.getCell(9).alignment = { horizontal: "right" };
     row.getCell(6).numFmt = NUM_FMT_RUPIAH;
     row.getCell(7).numFmt = NUM_FMT_RUPIAH;
     row.getCell(8).numFmt = NUM_FMT_RUPIAH;
+    row.getCell(9).numFmt = NUM_FMT_RUPIAH;
     applyBorderRow(row);
   });
 
   const totalSum = payload.items.reduce((s, it) => s + (it.total ?? 0), 0);
   const paidSum = payload.items.reduce((s, it) => s + (it.paid ?? 0), 0);
+  const changeSum = payload.items.reduce((s, it) => s + (it.change ?? 0), 0);
   const remainingSum = payload.items.reduce((s, it) => s + (it.remaining ?? 0), 0);
-  const grandTotalRow = worksheet.addRow([`GRAND TOTAL : ${payload.items.length}`, "", "", "", "", totalSum, paidSum, remainingSum]);
+  const grandTotalRow = worksheet.addRow([`GRAND TOTAL : ${payload.items.length}`, "", "", "", "", totalSum, paidSum, changeSum, remainingSum]);
   worksheet.mergeCells(`A${grandTotalRow.number}:E${grandTotalRow.number}`);
   grandTotalRow.getCell(1).font = { bold: true };
   grandTotalRow.getCell(1).alignment = { horizontal: "left" };
   grandTotalRow.getCell(6).alignment = { horizontal: "right" };
   grandTotalRow.getCell(7).alignment = { horizontal: "right" };
   grandTotalRow.getCell(8).alignment = { horizontal: "right" };
+  grandTotalRow.getCell(9).alignment = { horizontal: "right" };
   grandTotalRow.getCell(6).font = { bold: true };
   grandTotalRow.getCell(7).font = { bold: true };
   grandTotalRow.getCell(8).font = { bold: true };
+  grandTotalRow.getCell(9).font = { bold: true };
   grandTotalRow.getCell(6).numFmt = NUM_FMT_RUPIAH;
   grandTotalRow.getCell(7).numFmt = NUM_FMT_RUPIAH;
   grandTotalRow.getCell(8).numFmt = NUM_FMT_RUPIAH;
+  grandTotalRow.getCell(9).numFmt = NUM_FMT_RUPIAH;
   grandTotalRow.eachCell((cell) => {
     cell.fill = EXCEL_TOTAL_FILL;
   });
   applyBorderRow(grandTotalRow);
 
-  addPrintDateRow(worksheet, 8);
+  addPrintDateRow(worksheet, 9);
   for (let i = 1; i <= 3; i += 1) worksheet.getRow(i).height = 22;
   worksheet.getRow(headerRowNumber).height = 24;
   worksheet.views = [{ state: "frozen", ySplit: headerRowNumber }];
@@ -328,10 +334,13 @@ const buildFinanceWorkbook = (payload: Extract<BuildExcelPayload, { kind: "finan
 };
 
 const toArrayBuffer = (bufferLike: unknown): ArrayBuffer => {
-  if (bufferLike instanceof ArrayBuffer) return bufferLike;
+  if (bufferLike instanceof ArrayBuffer) return bufferLike.slice(0);
+  if (typeof SharedArrayBuffer !== "undefined" && bufferLike instanceof SharedArrayBuffer) {
+    return new Uint8Array(bufferLike).slice().buffer;
+  }
   if (ArrayBuffer.isView(bufferLike)) {
     const view = bufferLike as ArrayBufferView;
-    return view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength);
+    return new Uint8Array(view.buffer, view.byteOffset, view.byteLength).slice().buffer;
   }
   throw new Error("Unsupported excel buffer type");
 };

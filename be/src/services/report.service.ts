@@ -85,7 +85,17 @@ export const getDebtReport = async (dateFrom?: Date, dateTo?: Date, noFaktur?: s
   }
 
   const rawItems = await Debt.find(where).sort({ created_date_ts: -1, created_date: -1 }).lean();
-  const items = await attachCustomerName(rawItems);
+  let items = await attachCustomerName(rawItems);
+
+  // attach kembalian from sale transactions
+  const invoiceNos = items.map((it: any) => it.no_faktur_jual).filter(Boolean);
+  if (invoiceNos.length) {
+    const sales = await SaleTransaction.find({ no_faktur_jual: { $in: invoiceNos } })
+      .select('no_faktur_jual kembalian')
+      .lean();
+    const kembalianByInvoice = new Map(sales.map((s) => [s.no_faktur_jual, s.kembalian ?? 0]));
+    items = items.map((it: any) => ({ ...it, kembalian: kembalianByInvoice.get(it.no_faktur_jual) ?? 0 }));
+  }
 
   const summary = items.reduce(
     (acc, item) => {
@@ -121,7 +131,17 @@ export const getPayableReport = async (dateFrom?: Date, dateTo?: Date, noFaktur?
   }
 
   const rawItems = await Payable.find(where).sort({ created_date_ts: -1, created_date: -1 }).lean();
-  const items = await attachCustomerName(rawItems);
+  let items = await attachCustomerName(rawItems);
+
+  // attach kembalian from purchase transactions
+  const invoiceNos = items.map((it: any) => it.no_faktur_beli).filter(Boolean);
+  if (invoiceNos.length) {
+    const purchases = await PurchaseTransaction.find({ no_faktur_beli: { $in: invoiceNos } })
+      .select('no_faktur_beli kembalian')
+      .lean();
+    const kembalianByInvoice = new Map(purchases.map((p) => [p.no_faktur_beli, p.kembalian ?? 0]));
+    items = items.map((it: any) => ({ ...it, kembalian: kembalianByInvoice.get(it.no_faktur_beli) ?? 0 }));
+  }
 
   const summary = items.reduce(
     (acc, item) => {
@@ -204,15 +224,20 @@ export const getFinanceReport = async (
   ]);
 
   let ranged: FinanceBaseItem[] = [
-    ...salesInRange.map((item) => ({
-      kategori: 'Penjualan' as const,
-      deskripsi: `${item.no_faktur_jual} (Rp ${formatNominalId(item.total)})`,
-      uang_masuk: item.total,
-      uang_keluar: 0,
-      nominal: item.total,
-      created_date: item.created_date,
-      created_date_ts: item.created_date_ts,
-    })),
+    // Use effective paid amounts (dibayar clamped to invoice total) for cashflow
+    ...salesInRange.map((item) => {
+      const dibayar = Math.max(0, item.dibayar ?? 0);
+      const effectivePaid = Math.max(0, Math.min(dibayar, item.total ?? 0));
+      return {
+        kategori: 'Penjualan' as const,
+        deskripsi: `${item.no_faktur_jual} (Rp ${formatNominalId(item.total)})`,
+        uang_masuk: effectivePaid,
+        uang_keluar: 0,
+        nominal: effectivePaid,
+        created_date: item.created_date,
+        created_date_ts: item.created_date_ts,
+      } as FinanceBaseItem;
+    }),
     ...salesInRange
       .filter((item) => (item.kembalian ?? 0) > 0)
       .map((item) => ({
@@ -224,15 +249,22 @@ export const getFinanceReport = async (
         created_date: item.created_date,
         created_date_ts: item.created_date_ts,
       })),
-    ...purchasesInRange.map((item) => ({
-      kategori: 'Pembelian' as const,
-      deskripsi: `${item.no_faktur_beli} (Rp ${formatNominalId(item.total)})`,
-      uang_masuk: 0,
-      uang_keluar: item.total,
-      nominal: item.total,
-      created_date: item.created_date,
-      created_date_ts: item.created_date_ts,
-    })),
+    ...purchasesInRange.map((item) => {
+      const dibayar = Math.max(0, item.dibayar ?? 0);
+      const effectivePaid = Math.max(0, Math.min(dibayar, item.total ?? 0));
+      const kembalian = Math.max(0, item.kembalian ?? 0);
+      // For purchases, cash outflow is the effective paid amount; if there's change given back (kembalian),
+      // include it as additional outflow (recorded separately in transactions flow).
+      return {
+        kategori: 'Pembelian' as const,
+        deskripsi: `${item.no_faktur_beli} (Rp ${formatNominalId(item.total)})`,
+        uang_masuk: 0,
+        uang_keluar: effectivePaid + kembalian,
+        nominal: effectivePaid + kembalian,
+        created_date: item.created_date,
+        created_date_ts: item.created_date_ts,
+      } as FinanceBaseItem;
+    }),
     ...purchasesInRange
       .filter((item) => (item.kembalian ?? 0) > 0)
       .map((item) => ({

@@ -3,12 +3,19 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Search } from "lucide-react";
+import { MoreVertical, Search } from "lucide-react";
+import pelunasanIcon from "../../../assets/pelunasan_icon.png";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -17,6 +24,7 @@ import { TableFetchProgress } from "@/components/common/TableFetchProgress";
 import { TablePagination } from "@/components/common/TablePagination";
 import { ErrorState } from "@/components/common/States";
 import { CurrencyInput } from "@/components/common/CurrencyInput";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useDebts, useRecordPayment } from "./hooks";
 import type { Debt } from "@/types";
@@ -68,13 +76,13 @@ export default function DebtsPage() {
 
   return (
     <div>
-      <Card className="overflow-hidden p-0">
-        <div className="bg-primary px-6 py-4 text-primary-foreground">
+      <Card className="p-0">
+        <div className="bg-primary px-4 py-4 sm:px-6 text-primary-foreground">
           <h1 className="text-lg font-semibold">Piutang</h1>
         </div>
 
-        <div className="flex flex-col gap-3 border-b border-border bg-background px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative max-w-xs flex-1">
+        <div className="flex flex-col gap-3 border-b border-border bg-background px-4 py-4 sm:px-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative w-full sm:max-w-xs sm:flex-1">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Cari piutang / no faktur…"
@@ -87,11 +95,11 @@ export default function DebtsPage() {
 
         <TableFetchProgress loading={isFetching && !isLoading} />
         {isLoading ? (
-          <div className="bg-muted/20 p-6"><TableSkeleton /></div>
+          <div className="bg-muted/20 p-4 sm:p-6"><TableSkeleton /></div>
         ) : isError ? (
-          <div className="bg-muted/20 p-6"><ErrorState onRetry={() => refetch()} /></div>
+          <div className="bg-muted/20 p-4 sm:p-6"><ErrorState onRetry={() => refetch()} /></div>
         ) : filtered.length === 0 ? (
-          <div className="bg-muted/20 p-6">
+          <div className="bg-muted/20 p-4 sm:p-6">
             <div className="flex flex-col items-center gap-3 px-6 py-10 text-center text-base text-muted-foreground">
               <img src={emptyDataIcon} alt="Data tidak ada" className="h-64 w-64 object-contain" />
               <p className="text-lg font-semibold leading-none">Tidak ada piutang</p>
@@ -99,7 +107,7 @@ export default function DebtsPage() {
             </div>
           </div>
         ) : (
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             <div className="border border-border bg-muted/20">
               <Table>
                   <TableHeader>
@@ -110,8 +118,9 @@ export default function DebtsPage() {
                     <TableHead className="font-semibold text-foreground">Tanggal</TableHead>
                     <TableHead className="text-right font-semibold text-foreground">Total</TableHead>
                     <TableHead className="text-right font-semibold text-foreground">Dibayar</TableHead>
+                    <TableHead className="text-right font-semibold text-foreground">Kembalian</TableHead>
                     <TableHead className="text-right font-semibold text-foreground">Sisa</TableHead>
-                    <TableHead className="w-24 font-semibold text-foreground" />
+                    <TableHead className="w-[74px] text-center font-semibold text-foreground">Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -123,18 +132,50 @@ export default function DebtsPage() {
                       <TableCell className="text-muted-foreground">{formatDate(d.createdAt)}</TableCell>
                       <TableCell className="text-right tabular-nums">{formatCurrency(d.total)}</TableCell>
                       <TableCell className="text-right tabular-nums">{formatCurrency(d.paid)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{formatCurrency(d.change ?? 0)}</TableCell>
                       <TableCell className="text-right font-semibold tabular-nums">{formatCurrency(d.remaining)}</TableCell>
                       <TableCell className="text-right">
-                        <Button size="sm" variant="outline" onClick={() => { form.reset({ amount: d.remaining }); setTarget(d); }}>
-                          Catat pembayaran
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 rounded-none border-0 p-0 shadow-none outline-none ring-0 focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:bg-transparent"
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent side="left" align="start" sideOffset={6} className="w-10 min-w-0 p-1">
+                            <DropdownMenuItem
+                              disabled={d.remaining <= 0}
+                              onClick={() => {
+                                if (d.remaining <= 0) return;
+                                form.reset({ amount: d.remaining });
+                                setTarget(d);
+                              }}
+                              className="flex h-8 w-8 justify-center p-0 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40"
+                            >
+                              <Tooltip>
+                                  <TooltipTrigger asChild>
+                                  <span className="inline-flex h-8 w-8 items-center justify-center">
+                                    <img src={pelunasanIcon} alt="Pelunasan" className="h-4 w-4" />
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent className="whitespace-nowrap px-1 py-0.5 text-xs">
+                                  Pelunasan
+                                </TooltipContent>
+                              </Tooltip>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
 
-              <div className="flex items-center justify-between border-t border-border bg-background px-6 py-3">
+              <div className="flex items-center justify-between border-t border-border bg-background px-4 py-3 sm:px-6">
                 <p className="text-sm font-medium">Total Piutang: {totalItems}</p>
               </div>
 
@@ -157,6 +198,11 @@ export default function DebtsPage() {
             className="space-y-4"
             onSubmit={form.handleSubmit(async (values) => {
               if (!target) return;
+              if ((target.remaining ?? 0) <= 0) {
+                toast.error("Piutang ini sudah lunas");
+                setTarget(null);
+                return;
+              }
               try {
                 await recordMut.mutateAsync({ debtId: target.id, amount: values.amount });
                 toast.success("Pembayaran dicatat");

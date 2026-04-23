@@ -247,18 +247,18 @@ export default function FinanceReportPage() {
 
   return (
     <div>
-      <Card className="overflow-hidden p-0">
-        <div className="bg-primary px-6 py-4 text-primary-foreground">
+      <Card className="p-0">
+        <div className="bg-primary px-4 py-4 sm:px-6 text-primary-foreground">
           <h1 className="text-lg font-semibold">Laporan Keuangan</h1>
         </div>
 
-        <div className="flex flex-col gap-3 border-b border-border bg-background px-6 py-4 sm:flex-row sm:items-end">
+        <div className="flex flex-col gap-3 border-b border-border bg-background px-4 py-4 sm:px-6 sm:flex-row sm:items-end">
           <div className="relative w-full sm:max-w-xs">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input placeholder="Cari data…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-8" />
           </div>
 
-          <div className="w-full max-w-[170px]">
+          <div className="w-full sm:max-w-[170px]">
             <label className="mb-1 block text-xs text-muted-foreground">Tipe Laporan</label>
             <Select value={reportType} onValueChange={(v) => setReportType(v as FinanceReportType)}>
               <SelectTrigger className="rounded-none"><SelectValue /></SelectTrigger>
@@ -269,11 +269,11 @@ export default function FinanceReportPage() {
             </Select>
           </div>
 
-          <div className="w-full max-w-[210px]">
+          <div className="w-full sm:max-w-[210px]">
             <label htmlFor="dateFrom" className="mb-1 block text-xs text-muted-foreground">Tanggal Awal</label>
             <Input id="dateFrom" type="date" value={dateFrom} max={dateTo || undefined} onChange={(e) => setDateFrom(e.target.value)} />
           </div>
-          <div className="w-full max-w-[210px]">
+          <div className="w-full sm:max-w-[210px]">
             <label htmlFor="dateTo" className="mb-1 block text-xs text-muted-foreground">Tanggal Akhir</label>
             <Input id="dateTo" type="date" value={dateTo} min={dateFrom || undefined} onChange={(e) => setDateTo(e.target.value)} />
           </div>
@@ -285,7 +285,7 @@ export default function FinanceReportPage() {
         )}
         <TableFetchProgress loading={financeQ.isFetching && !financeQ.isLoading} />
 
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           <div className="border border-border bg-muted/20">
             {submittedFilter === null ? (
               <div className="flex flex-col items-center gap-3 px-6 py-10 text-center text-sm text-muted-foreground">
@@ -293,9 +293,9 @@ export default function FinanceReportPage() {
                 <p>Silahkan cari data untuk menampilkan laporan</p>
               </div>
             ) : financeQ.isLoading ? (
-              <div className="p-6"><TableSkeleton rows={6} cols={reportType === "rekap" ? 3 : 4} /></div>
+              <div className="p-4 sm:p-6"><TableSkeleton rows={6} cols={reportType === "rekap" ? 3 : 4} /></div>
             ) : financeQ.isError || !financeQ.data ? (
-              <div className="p-6"><ErrorState message="Gagal memuat laporan keuangan." onRetry={() => void financeQ.refetch()} /></div>
+              <div className="p-4 sm:p-6"><ErrorState message="Gagal memuat laporan keuangan." onRetry={() => void financeQ.refetch()} /></div>
             ) : !filtered.length ? (
               <div className="flex flex-col items-center gap-3 px-6 py-10 text-center text-base text-muted-foreground">
                 <img src={emptyDataIcon} alt="Data tidak ada" className="h-64 w-64 object-contain" />
@@ -324,7 +324,7 @@ export default function FinanceReportPage() {
                     ))}
                   </TableBody>
                 </Table>
-                <div className="flex items-center justify-between border-t border-border bg-background px-6 py-3">
+                <div className="flex items-center justify-between border-t border-border bg-background px-4 py-3 sm:px-6">
                   <p className="text-sm font-medium">Total Record: {totalItems}</p>
                 </div>
                 <TablePagination

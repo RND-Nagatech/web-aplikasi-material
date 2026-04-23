@@ -43,7 +43,9 @@ interface ApiDebtItem {
   remaining?: number;
   createdAt?: string;
   created_date?: string;
+  kembalian?: number;
 }
+
 
 interface ApiDebtReportResponse {
   items: ApiDebtItem[];
@@ -65,6 +67,7 @@ interface ApiPayableItem {
   remaining?: number;
   createdAt?: string;
   created_date?: string;
+  kembalian?: number;
 }
 
 interface ApiPayableReportResponse {
@@ -120,6 +123,7 @@ const mapDebtItem = (item: ApiDebtItem): Debt => ({
       : item.transaction?._id ?? ""),
   total: item.total,
   paid: item.dibayar ?? item.paid ?? 0,
+  change: item.kembalian ?? 0,
   remaining: item.sisa ?? item.remaining ?? 0,
   createdAt: item.created_date ?? item.createdAt ?? "",
 });
@@ -143,13 +147,20 @@ const mapPayableItem = (item: ApiPayableItem): Payable => ({
       : item.transaction?._id ?? ""),
   total: item.total,
   paid: item.dibayar ?? item.paid ?? 0,
+  change: item.kembalian ?? 0,
   remaining: item.sisa ?? item.remaining ?? 0,
   createdAt: item.created_date ?? item.createdAt ?? "",
 });
 
+const stripNominalFromDescription = (desc?: string) => {
+  if (!desc) return "-";
+  // Remove trailing " (Rp ... )" or similar nominal suffix added by backend
+  return desc.replace(/\s*\(Rp[^)]*\)\s*$/i, "").trim() || "-";
+};
+
 const mapFinanceItem = (item: ApiFinanceItem) => ({
   kategori: item.kategori,
-  deskripsi: item.deskripsi ?? "-",
+  deskripsi: stripNominalFromDescription(item.deskripsi),
   uangMasuk: item.uang_masuk ?? 0,
   uangKeluar: item.uang_keluar ?? 0,
   createdDate: item.created_date,

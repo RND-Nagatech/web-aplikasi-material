@@ -73,13 +73,13 @@ export default function StoresPage() {
 
   return (
     <div>
-      <Card className="overflow-hidden p-0">
-        <div className="bg-primary px-6 py-4 text-primary-foreground">
+      <Card className="p-0">
+        <div className="bg-primary px-4 py-4 sm:px-6 text-primary-foreground">
           <h1 className="text-lg font-semibold">Master Toko</h1>
         </div>
 
-        <div className="flex flex-col gap-3 border-b border-border bg-background px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative max-w-xs flex-1">
+        <div className="flex flex-col gap-3 border-b border-border bg-background px-4 py-4 sm:px-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative w-full sm:max-w-xs sm:flex-1">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Cari toko…"
@@ -97,11 +97,11 @@ export default function StoresPage() {
 
         <TableFetchProgress loading={isFetching && !isLoading} />
         {isLoading ? (
-          <div className="bg-muted/20 p-6"><TableSkeleton /></div>
+          <div className="bg-muted/20 p-4 sm:p-6"><TableSkeleton /></div>
         ) : isError ? (
-          <div className="bg-muted/20 p-6"><ErrorState onRetry={() => refetch()} /></div>
+          <div className="bg-muted/20 p-4 sm:p-6"><ErrorState onRetry={() => refetch()} /></div>
         ) : filtered.length === 0 ? (
-          <div className="bg-muted/20 p-6">
+          <div className="bg-muted/20 p-4 sm:p-6">
             <div className="flex flex-col items-center gap-3 px-6 py-10 text-center text-base text-muted-foreground">
               <img src={emptyDataIcon} alt="Data tidak ada" className="h-64 w-64 object-contain" />
               <p className="text-lg font-semibold leading-none">Belum ada data toko</p>
@@ -109,7 +109,7 @@ export default function StoresPage() {
             </div>
           </div>
         ) : (
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             <div className="border border-border bg-muted/20">
               <Table>
                 <TableHeader>
@@ -150,7 +150,7 @@ export default function StoresPage() {
                 </TableBody>
               </Table>
 
-              <div className="flex items-center justify-between border-t border-border bg-background px-6 py-3">
+              <div className="flex items-center justify-between border-t border-border bg-background px-4 py-3 sm:px-6">
                 <p className="text-sm font-medium">Total Toko: {totalItems}</p>
               </div>
 

@@ -12,6 +12,7 @@ export type DebtExcelItem = {
   createdAt: string;
   total: number;
   paid: number;
+  change?: number;
   remaining: number;
 };
 
@@ -22,6 +23,7 @@ export type PayableExcelItem = {
   createdAt: string;
   total: number;
   paid: number;
+  change?: number;
   remaining: number;
 };
 

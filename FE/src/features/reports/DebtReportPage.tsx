@@ -115,6 +115,7 @@ export default function DebtReportPage() {
       formatDate(item.createdAt),
       formatCurrency(item.total),
       formatCurrency(item.paid),
+      formatCurrency(item.change ?? 0),
       formatCurrency(item.remaining),
     ]);
 
@@ -122,23 +123,33 @@ export default function DebtReportPage() {
     const paidSum = filtered.reduce((s, it) => s + (it.paid ?? 0), 0);
     const remainingSum = filtered.reduce((s, it) => s + (it.remaining ?? 0), 0);
 
+    const changeSum = filtered.reduce((s, it) => s + (it.change ?? 0), 0);
     tableBody.push([
       { content: `GRAND TOTAL : ${totalItems}`, colSpan: 5, styles: { halign: "left", fontStyle: "bold" } },
       { content: formatCurrency(totalSum), styles: { halign: "right", fontStyle: "bold" } },
       { content: formatCurrency(paidSum), styles: { halign: "right", fontStyle: "bold" } },
+      { content: formatCurrency(changeSum), styles: { halign: "right", fontStyle: "bold" } },
       { content: formatCurrency(remainingSum), styles: { halign: "right", fontStyle: "bold" } },
     ]);
 
     pdf.renderReportTablePdf(doc, {
-      head: [["No", "No Faktur", "Pelanggan", "Kode Customer", "Tanggal", "Total", "Dibayar", "Sisa"]],
+      head: [["No", "No Faktur", "Pelanggan", "Kode Customer", "Tanggal", "Total", "Dibayar", "Kembalian", "Sisa"]],
       body: tableBody,
       autoTableOptions: {
+        styles: {
+          fontSize: 9,
+          cellPadding: 4,
+        },
         columnStyles: {
-          0: { halign: "center", cellWidth: 56 },
-          4: { halign: "center", cellWidth: 100 },
-          5: { halign: "right", cellWidth: 110 },
-          6: { halign: "right", cellWidth: 110 },
-          7: { halign: "right", cellWidth: 110 },
+          0: { halign: "center", cellWidth: 20 }, // No (diperkecil)
+          1: { halign: "left", cellWidth: 92 },
+          2: { halign: "left", cellWidth: 110 }, // Pelanggan (dipanjangkan)
+          3: { halign: "left", cellWidth: 72 },
+          4: { halign: "center", cellWidth: 68 }, // Tanggal (diperkecil)
+          5: { halign: "right", cellWidth: 95 }, // Nominal dibuat lebih aman
+          6: { halign: "right", cellWidth: 95 },
+          7: { halign: "right", cellWidth: 95 },
+          8: { halign: "right", cellWidth: 95 },
         },
       },
     });
@@ -165,6 +176,7 @@ export default function DebtReportPage() {
         createdAt: item.createdAt,
         total: item.total,
         paid: item.paid,
+        change: item.change ?? 0,
         remaining: item.remaining,
       })),
     });
@@ -172,23 +184,23 @@ export default function DebtReportPage() {
 
   return (
     <div>
-      <Card className="overflow-hidden p-0">
-        <div className="bg-primary px-6 py-4 text-primary-foreground">
+      <Card className="p-0">
+        <div className="bg-primary px-4 py-4 sm:px-6 text-primary-foreground">
           <h1 className="text-lg font-semibold">Laporan Piutang</h1>
         </div>
 
-        <div className="flex flex-col gap-3 border-b border-border bg-background px-6 py-4 sm:flex-row sm:items-end">
+        <div className="flex flex-col gap-3 border-b border-border bg-background px-4 py-4 sm:px-6 sm:flex-row sm:items-end">
           <div className="relative w-full sm:max-w-xs">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input placeholder="Cari pelanggan / no faktur…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-8" />
           </div>
 
-          <div className="w-full max-w-[210px]">
+          <div className="w-full sm:max-w-[210px]">
             <label htmlFor="dateFrom" className="mb-1 block text-xs text-muted-foreground">Tanggal Awal</label>
             <Input id="dateFrom" type="date" value={dateFrom} max={dateTo || undefined} onChange={(e) => setDateFrom(e.target.value)} />
           </div>
 
-          <div className="w-full max-w-[210px]">
+          <div className="w-full sm:max-w-[210px]">
             <label htmlFor="dateTo" className="mb-1 block text-xs text-muted-foreground">Tanggal Akhir</label>
             <Input id="dateTo" type="date" value={dateTo} min={dateFrom || undefined} onChange={(e) => setDateTo(e.target.value)} />
           </div>
@@ -201,7 +213,7 @@ export default function DebtReportPage() {
         )}
         <TableFetchProgress loading={debtQ.isFetching && !debtQ.isLoading} />
 
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           <div className="border border-border bg-muted/20">
             <div className="mb-3 grid gap-3 md:grid-cols-4">
               {/* summary boxes intentionally commented per styling guide */}
@@ -217,9 +229,9 @@ export default function DebtReportPage() {
                 <p>Silahkan cari data untuk menampilkan laporan</p>
               </div>
             ) : debtQ.isLoading ? (
-              <div className="p-6"><TableSkeleton rows={6} cols={5} /></div>
+              <div className="p-4 sm:p-6"><TableSkeleton rows={6} cols={5} /></div>
             ) : debtQ.isError || !debtQ.data ? (
-              <div className="p-6"><ErrorState message="Gagal memuat laporan piutang." onRetry={() => void debtQ.refetch()} /></div>
+              <div className="p-4 sm:p-6"><ErrorState message="Gagal memuat laporan piutang." onRetry={() => void debtQ.refetch()} /></div>
             ) : !filtered.length ? (
               <div className="flex flex-col items-center gap-3 px-6 py-10 text-center text-base text-muted-foreground">
                 <img src={emptyDataIcon} alt="Data tidak ada" className="h-64 w-64 object-contain" />
@@ -237,6 +249,7 @@ export default function DebtReportPage() {
                       <TableHead className="font-semibold text-foreground">Tanggal</TableHead>
                       <TableHead className="text-right font-semibold text-foreground">Total</TableHead>
                       <TableHead className="text-right font-semibold text-foreground">Dibayar</TableHead>
+                      <TableHead className="text-right font-semibold text-foreground">Kembalian</TableHead>
                       <TableHead className="text-right font-semibold text-foreground">Sisa</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -249,12 +262,13 @@ export default function DebtReportPage() {
                         <TableCell className="text-muted-foreground">{formatDate(item.createdAt)}</TableCell>
                         <TableCell className="text-right tabular-nums">{formatCurrency(item.total)}</TableCell>
                         <TableCell className="text-right tabular-nums">{formatCurrency(item.paid)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{formatCurrency(item.change ?? 0)}</TableCell>
                         <TableCell className="text-right tabular-nums font-semibold">{formatCurrency(item.remaining)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
-                <div className="flex items-center justify-between border-t border-border bg-background px-6 py-3">
+                <div className="flex items-center justify-between border-t border-border bg-background px-4 py-3 sm:px-6">
                   <p className="text-sm font-medium">Total Record: {totalItems}</p>
                 </div>
                 <TablePagination page={page} pageSize={pageSize} totalItems={totalItems} onPageChange={setPage} onPageSizeChange={setPageSize} />

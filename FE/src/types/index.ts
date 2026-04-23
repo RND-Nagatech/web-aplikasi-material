@@ -85,6 +85,7 @@ export interface Debt {
   transactionId: string;
   total: number;
   paid: number;
+  change?: number;
   remaining: number;
   createdAt: string;
 }
@@ -102,6 +103,7 @@ export interface Payable {
   transactionId: string;
   total: number;
   paid: number;
+  change?: number;
   remaining: number;
   createdAt: string;
 }

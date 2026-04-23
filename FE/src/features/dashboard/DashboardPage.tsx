@@ -12,9 +12,6 @@ import { dashboardService } from "@/services/dashboard";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { ErrorState } from "@/components/common/States";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
-import {
   Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 
@@ -54,21 +51,22 @@ export default function DashboardPage() {
     { label: "Piutang belum lunas", value: data ? formatCurrency(data.totalOutstandingDebts) : "—", icon: piutangIcon, alt: "piutang_icon" },
     { label: "Hutang belum lunas", value: data ? formatCurrency(data.totalOutstandingPayables) : "—", icon: hutangIcon, alt: "hutang_icon" },
   ];
+  const trendItems = data?.trend.items ?? [];
 
   return (
     <div>
-      <Card className="overflow-hidden p-0">
-        <div className="bg-primary px-6 py-4 text-primary-foreground">
+      <Card className="p-0">
+        <div className="bg-primary px-4 py-4 text-primary-foreground sm:px-6">
           <h1 className="text-lg font-semibold">Dasbor</h1>
         </div>
 
-        <div className="flex flex-col gap-3 border-b border-border bg-background px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-b border-border bg-background px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div>
             <p className="text-sm text-muted-foreground">Ringkasan inventaris, transaksi, piutang, dan hutang Anda.</p>
           </div>
         </div>
 
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           <div className="space-y-6 border border-border bg-muted/20 p-4">
             {isError ? (
               <ErrorState message="Gagal memuat ringkasan." onRetry={() => refetch()} />
@@ -100,15 +98,16 @@ export default function DashboardPage() {
                     <h2 className="text-sm font-semibold">Grafik Tren Penjualan Dan Pembelian (7 Hari)</h2>
                   </div>
                   <div className="p-4">
-                    <div className="h-[320px] w-full">
+                    <div className="overflow-x-auto">
+                      <div className="h-[320px] w-full min-w-[640px] sm:min-w-0">
                       {isLoading ? (
                         <Skeleton className="h-full w-full" />
                       ) : (
                         <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={data?.trend.items ?? []} margin={{ top: 12, right: 12, left: 20, bottom: 0 }}>
+                          <BarChart data={trendItems} margin={{ top: 12, right: 12, left: 12, bottom: 0 }}>
                             <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="label" />
-                            <YAxis width={92} tickFormatter={(v) => formatNumber(Number(v) || 0)} />
+                            <XAxis dataKey="label" interval={0} minTickGap={18} />
+                            <YAxis width={96} tickFormatter={(v) => formatNumber(Number(v) || 0)} />
                             <Tooltip
                               cursor={false}
                               formatter={(v) => formatCurrency(Number(v) || 0)}
@@ -154,101 +153,102 @@ export default function DashboardPage() {
                         </ResponsiveContainer>
                       )}
                     </div>
+                    </div>
                   </div>
                 </div>
 
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <div className="border border-border bg-card">
+                <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                  <div className="min-w-0 border border-border bg-card">
                     <div className="bg-primary px-4 py-3 text-primary-foreground">
                       <h2 className="text-sm font-semibold">Piutang Jatuh Tempo</h2>
                     </div>
-                    <div className="overflow-x-auto">
-                      <Table className="text-xs">
-                        <TableHeader>
-                          <TableRow className="bg-muted/50">
-                            <TableHead className="text-xs">No Faktur</TableHead>
-                            <TableHead className="text-xs">Tgl Piutang</TableHead>
-                            <TableHead className="text-xs">Jatuh Tempo</TableHead>
-                            <TableHead className="text-xs">Nama Customer</TableHead>
-                            <TableHead className="text-right text-xs">Sisa</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
+                    <div className="w-full overflow-x-auto">
+                      <table className="w-full min-w-[680px] border-collapse text-xs xl:min-w-0">
+                        <thead className="border-b">
+                          <tr className="bg-muted/50">
+                            <th className="h-12 whitespace-nowrap px-4 text-left align-middle font-medium text-muted-foreground xl:whitespace-normal">No Faktur</th>
+                            <th className="h-12 whitespace-nowrap px-4 text-left align-middle font-medium text-muted-foreground xl:whitespace-normal">Tgl Piutang</th>
+                            <th className="h-12 whitespace-nowrap px-4 text-left align-middle font-medium text-muted-foreground xl:whitespace-normal">Jatuh Tempo</th>
+                            <th className="h-12 whitespace-nowrap px-4 text-left align-middle font-medium text-muted-foreground xl:whitespace-normal">Nama Customer</th>
+                            <th className="h-12 whitespace-nowrap px-4 pr-6 text-right align-middle font-medium text-muted-foreground xl:whitespace-normal">Sisa</th>
+                          </tr>
+                        </thead>
+                        <tbody>
                           {isLoading ? (
-                            <TableRow>
-                              <TableCell colSpan={5}>
+                            <tr className="border-b">
+                              <td colSpan={5} className="p-4">
                                 <Skeleton className="h-8 w-full" />
-                              </TableCell>
-                            </TableRow>
+                              </td>
+                            </tr>
                           ) : !(data?.due.piutang.length) ? (
-                            <TableRow>
-                              <TableCell colSpan={5} className="h-44">
+                            <tr className="border-b">
+                              <td colSpan={5} className="h-44 p-4">
                                 <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
                                   <img src={emptyIcon} alt="empty" className="h-64 w-64 object-contain opacity-80" />
                                   <span className="text-xs">Tidak ada data piutang jatuh tempo</span>
                                 </div>
-                              </TableCell>
-                            </TableRow>
+                              </td>
+                            </tr>
                           ) : (
                             data.due.piutang.map((item) => (
-                              <TableRow key={item.id}>
-                                <TableCell className="text-xs">{item.noFaktur}</TableCell>
-                                <TableCell className="text-xs">{toDateOnly(item.tanggalTransaksi)}</TableCell>
-                                <TableCell className="text-xs">{toDateOnly(item.tanggalJatuhTempo)}</TableCell>
-                                <TableCell className="text-xs">{(item.namaCustomer ?? "").toUpperCase()}</TableCell>
-                                <TableCell className="text-right text-xs">{formatCurrency(item.sisa)}</TableCell>
-                              </TableRow>
+                              <tr key={item.id} className="border-b transition-colors hover:bg-muted/50">
+                                <td className="whitespace-nowrap p-4 align-middle xl:whitespace-normal">{item.noFaktur}</td>
+                                <td className="whitespace-nowrap p-4 align-middle xl:whitespace-normal">{toDateOnly(item.tanggalTransaksi)}</td>
+                                <td className="whitespace-nowrap p-4 align-middle xl:whitespace-normal">{toDateOnly(item.tanggalJatuhTempo)}</td>
+                                <td className="whitespace-nowrap p-4 align-middle xl:whitespace-normal">{(item.namaCustomer ?? "").toUpperCase()}</td>
+                                <td className="whitespace-nowrap p-4 pr-6 text-right align-middle xl:whitespace-normal">{formatCurrency(item.sisa)}</td>
+                              </tr>
                             ))
                           )}
-                        </TableBody>
-                      </Table>
+                        </tbody>
+                      </table>
                     </div>
                   </div>
 
-                  <div className="border border-border bg-card">
+                  <div className="min-w-0 border border-border bg-card">
                     <div className="bg-primary px-4 py-3 text-primary-foreground">
                       <h2 className="text-sm font-semibold">Hutang Jatuh Tempo</h2>
                     </div>
-                    <div className="overflow-x-auto">
-                      <Table className="text-xs">
-                        <TableHeader>
-                          <TableRow className="bg-muted/50">
-                            <TableHead className="text-xs">No Faktur</TableHead>
-                            <TableHead className="text-xs">Tgl Hutang</TableHead>
-                            <TableHead className="text-xs">Jatuh Tempo</TableHead>
-                            <TableHead className="text-xs">Nama Customer</TableHead>
-                            <TableHead className="text-right text-xs">Sisa</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
+                    <div className="w-full overflow-x-auto">
+                      <table className="w-full min-w-[680px] border-collapse text-xs xl:min-w-0">
+                        <thead className="border-b">
+                          <tr className="bg-muted/50">
+                            <th className="h-12 whitespace-nowrap px-4 text-left align-middle font-medium text-muted-foreground xl:whitespace-normal">No Faktur</th>
+                            <th className="h-12 whitespace-nowrap px-4 text-left align-middle font-medium text-muted-foreground xl:whitespace-normal">Tgl Hutang</th>
+                            <th className="h-12 whitespace-nowrap px-4 text-left align-middle font-medium text-muted-foreground xl:whitespace-normal">Jatuh Tempo</th>
+                            <th className="h-12 whitespace-nowrap px-4 text-left align-middle font-medium text-muted-foreground xl:whitespace-normal">Nama Customer</th>
+                            <th className="h-12 whitespace-nowrap px-4 pr-6 text-right align-middle font-medium text-muted-foreground xl:whitespace-normal">Sisa</th>
+                          </tr>
+                        </thead>
+                        <tbody>
                           {isLoading ? (
-                            <TableRow>
-                              <TableCell colSpan={5}>
+                            <tr className="border-b">
+                              <td colSpan={5} className="p-4">
                                 <Skeleton className="h-8 w-full" />
-                              </TableCell>
-                            </TableRow>
+                              </td>
+                            </tr>
                           ) : !(data?.due.hutang.length) ? (
-                            <TableRow>
-                              <TableCell colSpan={5} className="h-44">
+                            <tr className="border-b">
+                              <td colSpan={5} className="h-44 p-4">
                                 <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
                                   <img src={emptyIcon} alt="empty" className="h-64 w-64 object-contain opacity-80" />
                                   <span className="text-xs">Tidak ada data hutang jatuh tempo</span>
                                 </div>
-                              </TableCell>
-                            </TableRow>
+                              </td>
+                            </tr>
                           ) : (
                             data.due.hutang.map((item) => (
-                              <TableRow key={item.id}>
-                                <TableCell className="text-xs">{item.noFaktur}</TableCell>
-                                <TableCell className="text-xs">{toDateOnly(item.tanggalTransaksi)}</TableCell>
-                                <TableCell className="text-xs">{toDateOnly(item.tanggalJatuhTempo)}</TableCell>
-                                <TableCell className="text-xs">{(item.namaCustomer ?? "").toUpperCase()}</TableCell>
-                                <TableCell className="text-right text-xs">{formatCurrency(item.sisa)}</TableCell>
-                              </TableRow>
+                              <tr key={item.id} className="border-b transition-colors hover:bg-muted/50">
+                                <td className="whitespace-nowrap p-4 align-middle xl:whitespace-normal">{item.noFaktur}</td>
+                                <td className="whitespace-nowrap p-4 align-middle xl:whitespace-normal">{toDateOnly(item.tanggalTransaksi)}</td>
+                                <td className="whitespace-nowrap p-4 align-middle xl:whitespace-normal">{toDateOnly(item.tanggalJatuhTempo)}</td>
+                                <td className="whitespace-nowrap p-4 align-middle xl:whitespace-normal">{(item.namaCustomer ?? "").toUpperCase()}</td>
+                                <td className="whitespace-nowrap p-4 pr-6 text-right align-middle xl:whitespace-normal">{formatCurrency(item.sisa)}</td>
+                              </tr>
                             ))
                           )}
-                        </TableBody>
-                      </Table>
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 </div>

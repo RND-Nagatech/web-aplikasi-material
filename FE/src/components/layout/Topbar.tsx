@@ -2,6 +2,7 @@ import { LogOut, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { useNavigate } from "react-router-dom";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type TopbarProps = {
   onOpenMobileSidebar?: () => void;
@@ -34,23 +35,29 @@ export function Topbar({ onOpenMobileSidebar }: TopbarProps) {
         </div>
       </div>
       <div className="flex items-center gap-2 sm:gap-3">
-        <div className="hidden text-xs text-muted-foreground sm:block">
+        <div className="hidden shrink-0 whitespace-nowrap text-xs text-muted-foreground sm:block">
           Tanggal Sistem : <span className="font-medium text-foreground">{systemDateLabel}</span>
         </div>
-        <div className="text-xs text-muted-foreground sm:hidden">
+        <div className="shrink-0 whitespace-nowrap text-xs text-muted-foreground sm:hidden">
           <span className="font-medium text-foreground">{systemDateLabel}</span>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            logout();
-            navigate("/login");
-          }}
-        >
-          <LogOut className="mr-2 h-4 w-4" />
-          Keluar
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-foreground"
+              aria-label="Keluar"
+              onClick={() => {
+                logout();
+                navigate("/login");
+              }}
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Keluar</TooltipContent>
+        </Tooltip>
       </div>
     </header>
   );

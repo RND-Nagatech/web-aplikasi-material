@@ -174,12 +174,12 @@ export default function StockReportPage() {
 
   return (
     <div>
-      <Card className="overflow-hidden p-0">
-        <div className="bg-primary px-6 py-4 text-primary-foreground">
+      <Card className="p-0">
+        <div className="bg-primary px-4 py-4 sm:px-6 text-primary-foreground">
           <h1 className="text-lg font-semibold">Laporan Stock</h1>
         </div>
 
-        <div className="flex flex-col gap-3 border-b border-border bg-background px-6 py-4 sm:flex-row sm:items-end">
+        <div className="flex flex-col gap-3 border-b border-border bg-background px-4 py-4 sm:px-6 sm:flex-row sm:items-end">
           <div className="relative w-full sm:max-w-xs">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -189,7 +189,7 @@ export default function StockReportPage() {
               className="pl-8"
             />
           </div>
-          <div className="w-full max-w-[210px]">
+          <div className="w-full sm:max-w-[210px]">
             <label htmlFor="dateFrom" className="mb-1 block text-xs text-muted-foreground">Tanggal Awal</label>
             <Input
               id="dateFrom"
@@ -199,7 +199,7 @@ export default function StockReportPage() {
               onChange={(e) => setDateFrom(e.target.value)}
             />
           </div>
-          <div className="w-full max-w-[210px]">
+          <div className="w-full sm:max-w-[210px]">
             <label htmlFor="dateTo" className="mb-1 block text-xs text-muted-foreground">Tanggal Akhir</label>
             <Input
               id="dateTo"
@@ -218,7 +218,7 @@ export default function StockReportPage() {
         )}
         <TableFetchProgress loading={stockQ.isFetching && !stockQ.isLoading} />
 
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           <div className="border border-border bg-muted/20">
             {submittedFilter === null ? (
               <div className="flex flex-col items-center gap-3 px-6 py-10 text-center text-sm text-muted-foreground">
@@ -226,9 +226,9 @@ export default function StockReportPage() {
                 <p>Silahkan cari data untuk menampilkan laporan</p>
               </div>
             ) : stockQ.isLoading ? (
-              <div className="p-6"><TableSkeleton rows={6} cols={5} /></div>
+              <div className="p-4 sm:p-6"><TableSkeleton rows={6} cols={5} /></div>
             ) : stockQ.isError || !stockQ.data ? (
-              <div className="p-6"><ErrorState message="Gagal memuat laporan stock." onRetry={() => void stockQ.refetch()} /></div>
+              <div className="p-4 sm:p-6"><ErrorState message="Gagal memuat laporan stock." onRetry={() => void stockQ.refetch()} /></div>
             ) : !filtered.length ? (
               <div className="flex flex-col items-center gap-3 px-6 py-10 text-center text-base text-muted-foreground">
                 <img src={emptyDataIcon} alt="Data tidak ada" className="h-64 w-64 object-contain" />
@@ -260,7 +260,7 @@ export default function StockReportPage() {
                   </TableBody>
                 </Table>
 
-                <div className="flex items-center justify-between border-t border-border bg-background px-6 py-3">
+                <div className="flex items-center justify-between border-t border-border bg-background px-4 py-3 sm:px-6">
                   <p className="text-sm font-medium">Total Produk: {totalItems}</p>
                 </div>
 

@@ -1,4 +1,5 @@
 import jsPDF from "jspdf";
+import QRCode from "qrcode";
 import type { Product, Store, Transaction } from "@/types";
 import { formatCurrency, formatDate } from "@/lib/format";
 
@@ -37,6 +38,20 @@ export const loadImageAsDataUrl = (src: string): Promise<string | null> =>
     img.src = src;
   });
 
+const createQrDataUrl = async (value: string): Promise<string | null> => {
+  const sanitized = value.trim();
+  if (!sanitized || sanitized === "-") return null;
+  try {
+    return await QRCode.toDataURL(sanitized, {
+      margin: 0,
+      width: 220,
+      errorCorrectionLevel: "M",
+    });
+  } catch {
+    return null;
+  }
+};
+
 const chunkItems = <T,>(list: T[], size: number): T[][] => {
   if (size <= 0) return [list];
   const chunks: T[][] = [];
@@ -56,6 +71,7 @@ const drawNotaSection = (
     store?: Store;
     logoDataUrl: string | null;
     statusIconDataUrl: string | null;
+    qrDataUrl: string | null;
     customerName: string;
     customerPhone: string;
     customerAddress: string;
@@ -66,7 +82,7 @@ const drawNotaSection = (
   },
 ) => {
   const {
-    x, y, width, height, store, logoDataUrl, statusIconDataUrl, customerName, customerPhone, customerAddress,
+    x, y, width, height, store, logoDataUrl, statusIconDataUrl, qrDataUrl, customerName, customerPhone, customerAddress,
     invoiceNumber, transactionDate, items, total,
   } = options;
 
@@ -197,9 +213,21 @@ const drawNotaSection = (
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
-  doc.rect(contentX, sectionBottom - 26, 120, 18);
+  const noteY = sectionBottom - 26;
+  doc.rect(contentX, noteY, 120, 18);
   doc.text("Barang yang sudah dibeli", contentX + 60, sectionBottom - 18, { align: "center" });
   doc.text("tidak dapat ditukar/diuangkan", contentX + 60, sectionBottom - 11, { align: "center" });
+
+  if (qrDataUrl) {
+    try {
+      const qrX = contentX + 126;
+      const qrY = sectionBottom - 37;
+      const qrSize = 30;
+      doc.addImage(qrDataUrl, "PNG", qrX, qrY, qrSize, qrSize);
+    } catch {
+      // ignore QR failures to keep nota generation robust
+    }
+  }
 
   const signatureCenterX = rightX - 90;
   doc.setFontSize(10);
@@ -227,6 +255,7 @@ export const downloadNotaPdf = async (params: {
   const customerName = transaction.customerName?.trim() || "-";
   const transactionDate = formatDate(transaction.createdAt);
   const invoiceNumber = transaction.invoiceNumber ?? "-";
+  const qrDataUrl = await createQrDataUrl(invoiceNumber);
 
   chunks.forEach((chunk, idx) => {
     if (idx > 0 && idx % sectionsPerPage === 0) {
@@ -242,6 +271,7 @@ export const downloadNotaPdf = async (params: {
       store,
       logoDataUrl,
       statusIconDataUrl,
+      qrDataUrl,
       customerName,
       customerPhone,
       customerAddress,

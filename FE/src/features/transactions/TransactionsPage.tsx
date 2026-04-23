@@ -121,13 +121,13 @@ export default function TransactionsPage() {
 
   return (
     <div>
-      <Card className="overflow-hidden p-0">
-        <div className="bg-primary px-6 py-4 text-primary-foreground">
+      <Card className="p-0">
+        <div className="bg-primary px-4 py-4 sm:px-6 text-primary-foreground">
           <h1 className="text-lg font-semibold">Transaksi</h1>
         </div>
 
-        <div className="flex flex-col gap-3 border-b border-border bg-background px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative max-w-xs flex-1">
+        <div className="flex flex-col gap-3 border-b border-border bg-background px-4 py-4 sm:px-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative w-full sm:max-w-xs sm:flex-1">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Cari transaksi…"
@@ -143,11 +143,11 @@ export default function TransactionsPage() {
 
         <TableFetchProgress loading={isFetching && !isLoading} />
         {isLoading ? (
-          <div className="bg-muted/20 p-6"><TableSkeleton /></div>
+          <div className="bg-muted/20 p-4 sm:p-6"><TableSkeleton /></div>
         ) : isError ? (
-          <div className="bg-muted/20 p-6"><ErrorState onRetry={() => refetch()} /></div>
+          <div className="bg-muted/20 p-4 sm:p-6"><ErrorState onRetry={() => refetch()} /></div>
         ) : filtered.length === 0 ? (
-          <div className="bg-muted/20 p-6">
+          <div className="bg-muted/20 p-4 sm:p-6">
             <div className="flex flex-col items-center gap-3 px-6 py-10 text-center text-base text-muted-foreground">
               <img src={emptyDataIcon} alt="Data tidak ada" className="h-64 w-64 object-contain" />
               <p className="text-lg font-semibold leading-none">Belum ada transaksi</p>
@@ -155,7 +155,7 @@ export default function TransactionsPage() {
             </div>
           </div>
         ) : (
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             <div className="border border-border bg-muted/20">
               <Table>
                 <TableHeader>
@@ -219,7 +219,7 @@ export default function TransactionsPage() {
                 </TableBody>
               </Table>
 
-              <div className="flex items-center justify-between border-t border-border bg-background px-6 py-3">
+              <div className="flex items-center justify-between border-t border-border bg-background px-4 py-3 sm:px-6">
                 <p className="text-sm font-medium">Total Transaksi: {totalItems}</p>
               </div>
 
@@ -326,7 +326,9 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
       items: [],
     },
   });
-  const { fields, append, remove, replace } = useFieldArray({ control: form.control, name: "items" });
+  const {
+    fields, append, remove, replace, update,
+  } = useFieldArray({ control: form.control, name: "items" });
   const items = form.watch("items");
   const type = form.watch("type");
   const selectedCustomerId = form.watch("customerId");
@@ -436,19 +438,34 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
       toast.error("Maaf data quantity harus diisi");
       return;
     }
-    append({
-      productId: draftItem.productId,
-      quantity: qty,
-      priceType: draftItem.priceType,
-      unitPrice: draftItem.unitPrice,
-    });
+    const existingIndex = items.findIndex(
+      (item) => item.productId === draftItem.productId && item.priceType === draftItem.priceType,
+    );
+
+    if (existingIndex >= 0) {
+      const existing = items[existingIndex];
+      const mergedQty = (Number(existing?.quantity) || 0) + qty;
+      update(existingIndex, {
+        productId: existing.productId,
+        quantity: mergedQty,
+        priceType: existing.priceType,
+        unitPrice: Number(existing.unitPrice) || draftItem.unitPrice,
+      });
+    } else {
+      append({
+        productId: draftItem.productId,
+        quantity: qty,
+        priceType: draftItem.priceType,
+        unitPrice: draftItem.unitPrice,
+      });
+    }
     setDraftItem({ productId: "", priceType: "retail", quantity: "", unitPrice: 0 });
   };
 
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="flex h-[90vh] max-h-[90vh] w-[calc(100%-1.5rem)] max-w-5xl flex-col p-0 sm:h-[86vh] sm:rounded-none">
+        <DialogContent className="mx-4 flex h-[min(90vh,860px)] w-full max-w-5xl flex-col overflow-hidden p-0">
         <DialogHeader className="border-b border-border px-4 py-4 sm:px-6">
           <DialogTitle>Transaksi baru</DialogTitle>
         </DialogHeader>
@@ -496,7 +513,7 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
           )}
         >
           <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4 pb-6 sm:px-6">
-            <div className="grid grid-cols-1 gap-3 sm:max-w-sm">
+            <div className="grid w-full grid-cols-1 gap-3 sm:max-w-sm">
               <div className="space-y-1">
                 <Label>Tipe</Label>
                 <Select value={type} onValueChange={(v) => form.setValue("type", v as "sale" | "purchase")}>
@@ -552,7 +569,7 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
                 <p className="text-sm font-semibold">Data Barang ({fields.length})</p>
                 <p className="text-sm text-muted-foreground">Total: {formatCurrency(total)}</p>
               </div>
-              <div className="max-h-64 overflow-auto">
+              <div className="max-h-64 overflow-y-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -621,7 +638,7 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
       </Dialog>
 
       <Dialog open={customerEntryOpen} onOpenChange={setCustomerEntryOpen}>
-        <DialogContent className="max-h-[85vh] w-[calc(100%-1.5rem)] max-w-4xl overflow-hidden p-0 sm:rounded-none">
+        <DialogContent className="mx-4 max-h-[90vh] w-full max-w-4xl overflow-hidden p-0">
           <DialogHeader className="border-b border-border px-4 py-4 sm:px-6">
             <DialogTitle>Data Customer</DialogTitle>
           </DialogHeader>
@@ -718,7 +735,7 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
       </Dialog>
 
       <Dialog open={itemEntryOpen} onOpenChange={setItemEntryOpen}>
-        <DialogContent className="max-h-[85vh] w-[calc(100%-1.5rem)] max-w-5xl overflow-hidden p-0 sm:rounded-none">
+        <DialogContent className="mx-4 max-h-[90vh] w-full max-w-5xl overflow-hidden p-0">
           <DialogHeader className="border-b border-border px-4 py-4 sm:px-6">
             <DialogTitle>Tambah Barang</DialogTitle>
           </DialogHeader>
@@ -782,7 +799,7 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
               </div>
             </div>
 
-            <div className="max-h-[45vh] overflow-auto border border-border">
+            <div className="max-h-[45vh] overflow-y-auto border border-border">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -836,7 +853,7 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
       </Dialog>
 
       <Dialog open={paymentEntryOpen} onOpenChange={setPaymentEntryOpen}>
-        <DialogContent className="max-w-md rounded-none">
+        <DialogContent className="mx-4 w-full max-w-md">
           <DialogHeader>
             <DialogTitle>Bayar Sekarang</DialogTitle>
           </DialogHeader>
@@ -868,7 +885,7 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
       </Dialog>
 
       <Dialog open={customerFilterOpen} onOpenChange={setCustomerFilterOpen}>
-        <DialogContent className="max-h-[85vh] w-[calc(100%-1.5rem)] max-w-6xl overflow-hidden p-0 sm:rounded-none">
+        <DialogContent className="mx-4 max-h-[90vh] w-full max-w-6xl overflow-hidden p-0">
           <DialogHeader className="border-b border-border px-4 py-4 sm:px-6">
             <DialogTitle>Filter Data Customer</DialogTitle>
           </DialogHeader>
@@ -919,7 +936,7 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
               </div>
             </div>
 
-            <div className="max-w-xs">
+            <div className="w-full sm:max-w-xs">
               <Input
                 placeholder={pickerLoaded ? "Cari data..." : "Isi nama/no/alamat lalu tekan enter (Enter)"}
                 value={filterSearch}
@@ -935,7 +952,7 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
               />
             </div>
 
-            <div className="max-h-[45vh] overflow-auto border border-border">
+            <div className="max-h-[45vh] overflow-y-auto border border-border">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
