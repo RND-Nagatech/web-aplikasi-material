@@ -4,6 +4,8 @@ import { Customer } from '../models/Customer';
 import { DebtPaymentBody, PaginationQuery, PaginatedResult } from '../types';
 import { getPaginationParams, buildPaginatedResult } from '../utils/pagination';
 import { createError } from '../middlewares/error.middleware';
+import { recordCashMovement } from './cash-daily.service';
+import { runWithTransaction } from '../utils/transaction';
 
 type DebtListItem = {
   _id: unknown;
@@ -38,14 +40,20 @@ const attachCustomerName = async <T extends { kode_customer: string; nama_custom
 
 export const getAllDebts = async (query: PaginationQuery): Promise<PaginatedResult<DebtListItem>> => {
   const { page, limit, skip } = getPaginationParams(query);
+  const where: Record<string, unknown> = {};
+
+  if (query.no_faktur?.trim()) {
+    const escaped = query.no_faktur.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    where.no_faktur_jual = { $regex: `^${escaped}`, $options: 'i' };
+  }
 
   const [rawItems, total] = await Promise.all([
-    Debt.find()
+    Debt.find(where)
       .skip(skip)
       .limit(limit)
-      .sort({ created_date: -1 })
+      .sort({ created_date_ts: -1, created_date: -1 })
       .lean(),
-    Debt.countDocuments(),
+    Debt.countDocuments(where),
   ]);
 
   const items = await attachCustomerName(rawItems) as DebtListItem[];
@@ -53,30 +61,44 @@ export const getAllDebts = async (query: PaginationQuery): Promise<PaginatedResu
 };
 
 export const processDebtPayment = async (body: DebtPaymentBody): Promise<IDebt> => {
-  const debt = await Debt.findById(body.debt_id);
-  if (!debt) throw createError('Debt record not found', 404);
+  return runWithTransaction<IDebt>(async (session) => {
+    const debt = await Debt.findById(body.debt_id).session(session);
+    if (!debt) throw createError('Debt record not found', 404);
 
-  if (debt.sisa <= 0) {
-    throw createError('This debt has already been fully paid', 400);
-  }
+    if (debt.sisa <= 0) {
+      throw createError('This debt has already been fully paid', 400);
+    }
 
-  if (body.amount <= 0) {
-    throw createError('Payment amount must be greater than zero', 400);
-  }
+    if (body.amount <= 0) {
+      throw createError('Payment amount must be greater than zero', 400);
+    }
 
-  if (body.amount > debt.sisa) {
-    throw createError(`Payment amount exceeds remaining debt of ${debt.sisa}`, 400);
-  }
+    if (body.amount > debt.sisa) {
+      throw createError(`Payment amount exceeds remaining debt of ${debt.sisa}`, 400);
+    }
 
-  debt.dibayar += body.amount;
-  debt.sisa -= body.amount;
+    debt.dibayar += body.amount;
+    debt.sisa -= body.amount;
 
-  const savedDebt = await debt.save();
+    const savedDebt = await debt.save({ session });
 
-  await SaleTransaction.findOneAndUpdate({ no_faktur_jual: savedDebt.no_faktur_jual }, {
-    dibayar: savedDebt.dibayar,
-    status: savedDebt.sisa > 0 ? 'PIUTANG' : 'LUNAS',
+    const updatedSale = await SaleTransaction.findOneAndUpdate(
+      { no_faktur_jual: savedDebt.no_faktur_jual },
+      {
+        dibayar: savedDebt.dibayar,
+        status: savedDebt.sisa > 0 ? 'PIUTANG' : 'LUNAS',
+      },
+      { new: true, session }
+    );
+
+    if (!updatedSale) {
+      throw createError(`Sale transaction ${savedDebt.no_faktur_jual} not found`, 404);
+    }
+
+    await recordCashMovement(
+      { type: 'jual', amount: body.amount },
+      { session, now: new Date() }
+    );
+    return savedDebt;
   });
-
-  return savedDebt;
 };

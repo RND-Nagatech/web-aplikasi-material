@@ -4,17 +4,10 @@ import { Product } from '../models/Product';
 import { SaleTransaction } from '../models/SaleTransaction';
 import { PurchaseTransaction } from '../models/PurchaseTransaction';
 import { DashboardSummary } from '../types';
+import { getGmt7DateRangeStrings, parseGmt7StringToDate } from '../utils/date';
 
 const DUE_DAYS = 30;
 const JAKARTA_TIMEZONE = 'Asia/Jakarta';
-
-const parseCreatedDateGmt7 = (value?: string): Date | null => {
-  if (!value) return null;
-  const normalized = value.replace(' GMT+7', '+07:00').replace(' ', 'T');
-  const parsed = new Date(normalized);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed;
-};
 
 const formatJakartaDate = (date: Date): string => {
   const year = new Intl.DateTimeFormat('en-CA', { year: 'numeric', timeZone: JAKARTA_TIMEZONE }).format(date);
@@ -33,6 +26,23 @@ const addDays = (date: Date, days: number): Date => {
 };
 
 export const getDashboardSummary = async (periodDays: 7 | 30 = 7): Promise<DashboardSummary> => {
+  const today = new Date();
+  const start = new Date(today);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - (periodDays - 1));
+  const createdDateRange = getGmt7DateRangeStrings(start, today);
+  const trendWhere =
+    start && today
+      ? {
+          $or: [
+            { created_date_ts: { $gte: start, $lte: today } },
+            ...(createdDateRange.from && createdDateRange.to
+              ? [{ created_date: { $gte: createdDateRange.from, $lte: createdDateRange.to } }]
+              : []),
+          ],
+        }
+      : {};
+
   const [totalProducts, totalSales, totalPurchases, outstandingDebtResult, outstandingPayableResult, sales, purchases, debts, payables] = await Promise.all([
     Product.countDocuments(),
     SaleTransaction.countDocuments(),
@@ -43,16 +53,17 @@ export const getDashboardSummary = async (periodDays: 7 | 30 = 7): Promise<Dashb
     Payable.aggregate<{ totalOutstandingPayables: number }>([
       { $group: { _id: null, totalOutstandingPayables: { $sum: '$sisa' } } },
     ]),
-    SaleTransaction.find().select('created_date total').lean(),
-    PurchaseTransaction.find().select('created_date total').lean(),
-    Debt.find({ sisa: { $gt: 0 } }).select('kode_customer nama_customer no_faktur_jual total dibayar sisa created_date').lean(),
-    Payable.find({ sisa: { $gt: 0 } }).select('kode_customer nama_customer no_faktur_beli total dibayar sisa created_date').lean(),
+    SaleTransaction.find(trendWhere).select('created_date created_date_ts total').lean(),
+    PurchaseTransaction.find(trendWhere).select('created_date created_date_ts total').lean(),
+    Debt.find({ sisa: { $gt: 0 } })
+      .sort({ created_date_ts: -1, created_date: -1 })
+      .select('kode_customer nama_customer no_faktur_jual total dibayar sisa created_date created_date_ts')
+      .lean(),
+    Payable.find({ sisa: { $gt: 0 } })
+      .sort({ created_date_ts: -1, created_date: -1 })
+      .select('kode_customer nama_customer no_faktur_beli total dibayar sisa created_date created_date_ts')
+      .lean(),
   ]);
-
-  const today = new Date();
-  const start = new Date(today);
-  start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() - (periodDays - 1));
 
   const trendBucket = new Map<string, { date: string; label: string; penjualan: number; pembelian: number }>();
   for (let offset = 0; offset < periodDays; offset += 1) {
@@ -68,7 +79,7 @@ export const getDashboardSummary = async (periodDays: 7 | 30 = 7): Promise<Dashb
   }
 
   sales.forEach((item) => {
-    const createdAt = parseCreatedDateGmt7(item.created_date);
+    const createdAt = item.created_date_ts ?? parseGmt7StringToDate(item.created_date);
     if (!createdAt) return;
     const key = formatJakartaDate(createdAt);
     const bucket = trendBucket.get(key);
@@ -77,7 +88,7 @@ export const getDashboardSummary = async (periodDays: 7 | 30 = 7): Promise<Dashb
   });
 
   purchases.forEach((item) => {
-    const createdAt = parseCreatedDateGmt7(item.created_date);
+    const createdAt = item.created_date_ts ?? parseGmt7StringToDate(item.created_date);
     if (!createdAt) return;
     const key = formatJakartaDate(createdAt);
     const bucket = trendBucket.get(key);
@@ -98,7 +109,7 @@ export const getDashboardSummary = async (periodDays: 7 | 30 = 7): Promise<Dashb
 
   const piutang = debts
     .map((item) => {
-      const trxDate = parseCreatedDateGmt7(item.created_date);
+      const trxDate = item.created_date_ts ?? parseGmt7StringToDate(item.created_date);
       const dueDate = trxDate ? addDays(trxDate, DUE_DAYS) : null;
       const detail = saleByInvoice.get(item.no_faktur_jual);
       return {
@@ -121,7 +132,7 @@ export const getDashboardSummary = async (periodDays: 7 | 30 = 7): Promise<Dashb
 
   const hutang = payables
     .map((item) => {
-      const trxDate = parseCreatedDateGmt7(item.created_date);
+      const trxDate = item.created_date_ts ?? parseGmt7StringToDate(item.created_date);
       const dueDate = trxDate ? addDays(trxDate, DUE_DAYS) : null;
       const detail = purchaseByInvoice.get(item.no_faktur_beli);
       return {

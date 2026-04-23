@@ -6,6 +6,7 @@ export interface IStore extends Document {
   no_hp: string;
   alamat: string;
   created_date: string;
+  created_date_ts?: Date;
   edited_by: string;
   edited_date: string;
 }
@@ -17,6 +18,7 @@ const StoreSchema = new Schema<IStore>(
     no_hp: { type: String, required: true, trim: true },
     alamat: { type: String, required: true, trim: true },
     created_date: { type: String, required: true },
+    created_date_ts: { type: Date, required: false },
     edited_by: { type: String, trim: true, required: true, default: '-' },
     edited_date: { type: String, required: true, default: '-' },
   },
@@ -24,6 +26,6 @@ const StoreSchema = new Schema<IStore>(
 );
 
 StoreSchema.index({ nama_toko: 'text' });
-StoreSchema.index({ kode_toko: 1 }, { unique: true });
+StoreSchema.index({ created_date_ts: -1 });
 
 export const Store = model<IStore>('Store', StoreSchema, 'tm_toko');

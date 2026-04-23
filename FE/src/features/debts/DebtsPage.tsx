@@ -13,6 +13,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { TableSkeleton } from "@/components/common/TableSkeleton";
+import { TableFetchProgress } from "@/components/common/TableFetchProgress";
 import { TablePagination } from "@/components/common/TablePagination";
 import { ErrorState } from "@/components/common/States";
 import { CurrencyInput } from "@/components/common/CurrencyInput";
@@ -29,7 +30,7 @@ type FormOutput = z.output<typeof schema>;
 const DEFAULT_PAGE_SIZE = 10;
 
 export default function DebtsPage() {
-  const { data, isLoading, isError, refetch } = useDebts();
+  const { data, isLoading, isFetching, isError, refetch } = useDebts();
   const recordMut = useRecordPayment();
   const [target, setTarget] = useState<Debt | null>(null);
   const [search, setSearch] = useState("");
@@ -84,6 +85,7 @@ export default function DebtsPage() {
           </div>
         </div>
 
+        <TableFetchProgress loading={isFetching && !isLoading} />
         {isLoading ? (
           <div className="bg-muted/20 p-6"><TableSkeleton /></div>
         ) : isError ? (
@@ -100,10 +102,11 @@ export default function DebtsPage() {
           <div className="p-6">
             <div className="border border-border bg-muted/20">
               <Table>
-                <TableHeader>
+                  <TableHeader>
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
                     <TableHead className="font-semibold text-foreground">No Faktur</TableHead>
-                    <TableHead className="font-semibold text-foreground">Pelanggan</TableHead>
+                    <TableHead className="font-semibold text-foreground">Kode</TableHead>
+                    <TableHead className="font-semibold text-foreground">Nama</TableHead>
                     <TableHead className="font-semibold text-foreground">Tanggal</TableHead>
                     <TableHead className="text-right font-semibold text-foreground">Total</TableHead>
                     <TableHead className="text-right font-semibold text-foreground">Dibayar</TableHead>
@@ -115,6 +118,7 @@ export default function DebtsPage() {
                   {paginated.map((d) => (
                     <TableRow key={d.id}>
                       <TableCell className="font-medium">{d.transactionId || "-"}</TableCell>
+                      <TableCell className="font-medium">{d.customerId ?? "-"}</TableCell>
                       <TableCell className="font-medium">{d.customerName ?? "—"}</TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(d.createdAt)}</TableCell>
                       <TableCell className="text-right tabular-nums">{formatCurrency(d.total)}</TableCell>

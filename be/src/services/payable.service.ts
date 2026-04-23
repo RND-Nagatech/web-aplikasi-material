@@ -4,6 +4,8 @@ import { Customer } from '../models/Customer';
 import { PayablePaymentBody, PaginationQuery, PaginatedResult } from '../types';
 import { getPaginationParams, buildPaginatedResult } from '../utils/pagination';
 import { createError } from '../middlewares/error.middleware';
+import { recordCashMovement } from './cash-daily.service';
+import { runWithTransaction } from '../utils/transaction';
 
 type PayableListItem = {
   _id: unknown;
@@ -40,14 +42,20 @@ export const getAllPayables = async (
   query: PaginationQuery
 ): Promise<PaginatedResult<PayableListItem>> => {
   const { page, limit, skip } = getPaginationParams(query);
+  const where: Record<string, unknown> = {};
+
+  if (query.no_faktur?.trim()) {
+    const escaped = query.no_faktur.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    where.no_faktur_beli = { $regex: `^${escaped}`, $options: 'i' };
+  }
 
   const [rawItems, total] = await Promise.all([
-    Payable.find()
+    Payable.find(where)
       .skip(skip)
       .limit(limit)
-      .sort({ created_date: -1 })
+      .sort({ created_date_ts: -1, created_date: -1 })
       .lean(),
-    Payable.countDocuments(),
+    Payable.countDocuments(where),
   ]);
 
   const items = await attachCustomerName(rawItems) as PayableListItem[];
@@ -55,30 +63,44 @@ export const getAllPayables = async (
 };
 
 export const processPayablePayment = async (body: PayablePaymentBody): Promise<IPayable> => {
-  const payable = await Payable.findById(body.payable_id);
-  if (!payable) throw createError('Payable record not found', 404);
+  return runWithTransaction<IPayable>(async (session) => {
+    const payable = await Payable.findById(body.payable_id).session(session);
+    if (!payable) throw createError('Payable record not found', 404);
 
-  if (payable.sisa <= 0) {
-    throw createError('This payable has already been fully paid', 400);
-  }
+    if (payable.sisa <= 0) {
+      throw createError('This payable has already been fully paid', 400);
+    }
 
-  if (body.amount <= 0) {
-    throw createError('Payment amount must be greater than zero', 400);
-  }
+    if (body.amount <= 0) {
+      throw createError('Payment amount must be greater than zero', 400);
+    }
 
-  if (body.amount > payable.sisa) {
-    throw createError(`Payment amount exceeds remaining payable of ${payable.sisa}`, 400);
-  }
+    if (body.amount > payable.sisa) {
+      throw createError(`Payment amount exceeds remaining payable of ${payable.sisa}`, 400);
+    }
 
-  payable.dibayar += body.amount;
-  payable.sisa -= body.amount;
+    payable.dibayar += body.amount;
+    payable.sisa -= body.amount;
 
-  const savedPayable = await payable.save();
+    const savedPayable = await payable.save({ session });
 
-  await PurchaseTransaction.findOneAndUpdate({ no_faktur_beli: savedPayable.no_faktur_beli }, {
-    dibayar: savedPayable.dibayar,
-    status: savedPayable.sisa > 0 ? 'HUTANG' : 'LUNAS',
+    const updatedPurchase = await PurchaseTransaction.findOneAndUpdate(
+      { no_faktur_beli: savedPayable.no_faktur_beli },
+      {
+        dibayar: savedPayable.dibayar,
+        status: savedPayable.sisa > 0 ? 'HUTANG' : 'LUNAS',
+      },
+      { new: true, session }
+    );
+
+    if (!updatedPurchase) {
+      throw createError(`Purchase transaction ${savedPayable.no_faktur_beli} not found`, 404);
+    }
+
+    await recordCashMovement(
+      { type: 'beli', amount: body.amount },
+      { session, now: new Date() }
+    );
+    return savedPayable;
   });
-
-  return savedPayable;
 };

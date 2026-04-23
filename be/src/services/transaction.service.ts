@@ -9,8 +9,33 @@ import { CreateTransactionBody, PaginationQuery, PaginatedResult } from '../type
 import { getPaginationParams, buildPaginatedResult } from '../utils/pagination';
 import { createError } from '../middlewares/error.middleware';
 import { formatGmt7, formatGmt7DateCode } from '../utils/date';
+import { recordCashMovement } from './cash-daily.service';
 
 type TransactionRecord = ISaleTransaction | IPurchaseTransaction;
+const normalizeUpper = (value?: string): string => (value ?? '').trim().toUpperCase();
+type TransactionListItem = {
+  _id: mongoose.Types.ObjectId;
+  type_trx: 'JUAL' | 'BELI';
+  no_faktur_jual?: string;
+  no_faktur_beli?: string;
+  kode_customer: string;
+  nama_customer: string;
+  no_hp: string;
+  alamat: string;
+  items: Array<{
+    kode_produk: string;
+    qty: number;
+    harga_jual?: number;
+    harga_beli?: number;
+    subtotal: number;
+  }>;
+  total: number;
+  dibayar: number;
+  kembalian: number;
+  status: string;
+  created_date: string;
+  created_date_ts?: Date;
+};
 
 const generateNextCustomerCode = async (): Promise<string> => {
   const last = await Customer.findOne({ kode_customer: { $regex: '^C\\d{8}$' } })
@@ -66,22 +91,94 @@ const generateNextPurchaseInvoiceNumber = async (
   return `FB-${dateCode}-${String(nextSequence).padStart(4, '0')}`;
 };
 
-export const getAllTransactions = async (query: PaginationQuery): Promise<PaginatedResult<TransactionRecord>> => {
+export const getAllTransactions = async (query: PaginationQuery): Promise<PaginatedResult<TransactionListItem>> => {
   const { page, limit, skip } = getPaginationParams(query);
+  const search = query.search?.trim();
+  const escapedSearch = search?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-  const [sales, purchases] = await Promise.all([
-    SaleTransaction.find().sort({ created_date: -1 }),
-    PurchaseTransaction.find().sort({ created_date: -1 }),
-  ]);
+  const salesSearchMatch = escapedSearch
+    ? {
+        $or: [
+          { no_faktur_jual: { $regex: `^${escapedSearch}`, $options: 'i' } },
+          { nama_customer: { $regex: escapedSearch, $options: 'i' } },
+          { kode_customer: { $regex: escapedSearch, $options: 'i' } },
+        ],
+      }
+    : {};
 
-  const merged = [...sales, ...purchases].sort((a, b) => {
-    const aTime = a.created_date ? new Date(a.created_date.replace(' GMT+7', '+07:00').replace(' ', 'T')).getTime() : 0;
-    const bTime = b.created_date ? new Date(b.created_date.replace(' GMT+7', '+07:00').replace(' ', 'T')).getTime() : 0;
-    return bTime - aTime;
-  });
+  const purchasesSearchMatch = escapedSearch
+    ? {
+        $or: [
+          { no_faktur_beli: { $regex: `^${escapedSearch}`, $options: 'i' } },
+          { nama_customer: { $regex: escapedSearch, $options: 'i' } },
+          { kode_customer: { $regex: escapedSearch, $options: 'i' } },
+        ],
+      }
+    : {};
 
-  const total = merged.length;
-  const items = merged.slice(skip, skip + limit) as TransactionRecord[];
+  const aggregatePipeline: mongoose.PipelineStage[] = [
+    { $match: salesSearchMatch },
+    {
+      $project: {
+        type_trx: '$type_trx',
+        no_faktur_jual: '$no_faktur_jual',
+        no_faktur_beli: { $literal: null },
+        kode_customer: '$kode_customer',
+        nama_customer: '$nama_customer',
+        no_hp: '$no_hp',
+        alamat: '$alamat',
+        items: '$items',
+        total: '$total',
+        dibayar: '$dibayar',
+        kembalian: '$kembalian',
+        status: '$status',
+        created_date: '$created_date',
+        created_date_ts: '$created_date_ts',
+      },
+    },
+    {
+      $unionWith: {
+        coll: 'tt_beli_detail',
+        pipeline: [
+          { $match: purchasesSearchMatch },
+          {
+            $project: {
+              type_trx: '$type_trx',
+              no_faktur_jual: { $literal: null },
+              no_faktur_beli: '$no_faktur_beli',
+              kode_customer: '$kode_customer',
+              nama_customer: '$nama_customer',
+              no_hp: '$no_hp',
+              alamat: '$alamat',
+              items: '$items',
+              total: '$total',
+              dibayar: '$dibayar',
+              kembalian: '$kembalian',
+              status: '$status',
+              created_date: '$created_date',
+              created_date_ts: '$created_date_ts',
+            },
+          },
+        ],
+      },
+    },
+    { $sort: { created_date_ts: -1, created_date: -1 } },
+    {
+      $facet: {
+        items: [{ $skip: skip }, { $limit: limit }],
+        meta: [{ $count: 'total' }],
+      },
+    },
+  ];
+
+  const aggregateResult = await SaleTransaction.aggregate<{
+    items: TransactionListItem[];
+    meta: Array<{ total: number }>;
+  }>(aggregatePipeline);
+
+  const first = aggregateResult[0] ?? { items: [], meta: [] };
+  const total = first.meta[0]?.total ?? 0;
+  const items = first.items ?? [];
 
   return buildPaginatedResult(items, total, page, limit);
 };
@@ -95,9 +192,9 @@ export const createTransaction = async (body: CreateTransactionBody): Promise<Tr
     const createdDate = formatGmt7(now);
     const dateCode = formatGmt7DateCode(now);
     const resolvedPaid = body.dibayar ?? body.paid ?? 0;
-    const manualName = (body.nama_customer ?? '').trim();
+    const manualName = normalizeUpper(body.nama_customer);
     const manualNoHp = (body.no_hp ?? '').trim();
-    const manualAlamat = (body.alamat ?? '').trim();
+    const manualAlamat = normalizeUpper(body.alamat);
 
     let resolvedKodeCustomer = '-';
     let resolvedNamaCustomer = '';
@@ -109,7 +206,7 @@ export const createTransaction = async (body: CreateTransactionBody): Promise<Tr
       if (!customerDoc) {
         throw createError(`Customer ${body.customer} not found`, 404);
       }
-      if (customerDoc.is_active) {
+      if (!customerDoc.is_active) {
         throw createError(`Customer ${customerDoc.nama_customer} is inactive`, 400);
       }
       if (!customerDoc.kode_customer) {
@@ -117,8 +214,8 @@ export const createTransaction = async (body: CreateTransactionBody): Promise<Tr
         await customerDoc.save({ session });
       }
 
-      resolvedKodeCustomer = customerDoc.kode_customer;
-      resolvedNamaCustomer = customerDoc.nama_customer;
+      resolvedKodeCustomer = normalizeUpper(customerDoc.kode_customer);
+      resolvedNamaCustomer = normalizeUpper(customerDoc.nama_customer);
       resolvedNoHp = '-';
       resolvedAlamat = '-';
     } else {
@@ -137,7 +234,7 @@ export const createTransaction = async (body: CreateTransactionBody): Promise<Tr
       if (!product) {
         throw createError(`Product ${item.product} not found`, 404);
       }
-      if (product.is_active) {
+      if (!product.is_active) {
         throw createError(`Product ${product.nama_produk} is inactive`, 400);
       }
       if (!product.kode_produk) {
@@ -156,7 +253,7 @@ export const createTransaction = async (body: CreateTransactionBody): Promise<Tr
       await product.save({ session });
 
       normalizedItems.push({
-        kode_produk: product.kode_produk,
+        kode_produk: normalizeUpper(product.kode_produk),
         qty: item.qty,
         unit_price:
           body.type === 'jual'
@@ -168,6 +265,9 @@ export const createTransaction = async (body: CreateTransactionBody): Promise<Tr
 
     const remaining = Math.max(0, body.total - resolvedPaid);
     const kembalian = Math.max(0, resolvedPaid - body.total);
+    // Cashflow harus mencerminkan kas bersih aktual pada saat transaksi,
+    // bukan nilai invoice penuh saat transaksi belum lunas.
+    const effectivePaid = Math.max(0, Math.min(resolvedPaid, body.total));
     const resolvedStatus =
       remaining <= 0
         ? 'LUNAS'
@@ -201,6 +301,7 @@ export const createTransaction = async (body: CreateTransactionBody): Promise<Tr
                 kembalian,
                 status: resolvedStatus,
                 created_date: createdDate,
+                created_date_ts: now,
               },
             ],
             { session }
@@ -225,6 +326,7 @@ export const createTransaction = async (body: CreateTransactionBody): Promise<Tr
                 kembalian,
                 status: resolvedStatus,
                 created_date: createdDate,
+                created_date_ts: now,
               },
             ],
             { session }
@@ -241,6 +343,7 @@ export const createTransaction = async (body: CreateTransactionBody): Promise<Tr
             dibayar: resolvedPaid,
             sisa: remaining,
             created_date: createdDate,
+            created_date_ts: now,
           },
         ],
         { session }
@@ -258,10 +361,16 @@ export const createTransaction = async (body: CreateTransactionBody): Promise<Tr
             dibayar: resolvedPaid,
             sisa: remaining,
             created_date: createdDate,
+            created_date_ts: now,
           },
         ],
         { session }
       );
+    }
+
+    await recordCashMovement({ type: body.type, amount: effectivePaid }, { session, now });
+    if (kembalian > 0) {
+      await recordCashMovement({ direction: 'out', amount: kembalian }, { session, now });
     }
 
     await session.commitTransaction();

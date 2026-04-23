@@ -5,16 +5,18 @@ import { getPaginationParams, buildPaginatedResult } from '../utils/pagination';
 import { createError } from '../middlewares/error.middleware';
 import { formatGmt7 } from '../utils/date';
 
+const normalizeProductName = (value: string): string => value.trim().toUpperCase();
+
 export const getAllProducts = async (query: PaginationQuery): Promise<PaginatedResult<IProduct>> => {
   const { page, limit, skip } = getPaginationParams(query);
-  const filter: FilterQuery<IProduct> = { is_active: false };
+  const filter: FilterQuery<IProduct> = { is_active: true };
 
   if (query.search) {
     filter.$text = { $search: query.search };
   }
 
   const [items, total] = await Promise.all([
-    Product.find(filter).skip(skip).limit(limit).sort({ created_date: -1 }),
+    Product.find(filter).skip(skip).limit(limit).sort({ created_date_ts: -1, created_date: -1 }),
     Product.countDocuments(filter),
   ]);
 
@@ -23,17 +25,17 @@ export const getAllProducts = async (query: PaginationQuery): Promise<PaginatedR
 
 export const createProduct = async (body: CreateProductBody): Promise<IProduct> => {
   const normalizedName = body.nama_produk.trim();
-  const normalizedNameUpper = normalizedName.toUpperCase();
+  const normalizedNameUpper = normalizeProductName(body.nama_produk);
   const escapedName = normalizedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const existing = await Product.findOne({
     nama_produk: { $regex: `^${escapedName}$`, $options: 'i' },
   });
 
-  if (existing && !existing.is_active) {
+  if (existing && existing.is_active) {
     throw createError('Nama produk sudah digunakan', 409);
   }
 
-  if (existing && existing.is_active) {
+  if (existing && !existing.is_active) {
     if (!body.restore_existing) {
       throw createError('RESTORE_CONFIRMATION_REQUIRED', 409);
     }
@@ -42,7 +44,10 @@ export const createProduct = async (body: CreateProductBody): Promise<IProduct> 
     existing.harga_grosir = body.harga_grosir;
     existing.harga_ecer = body.harga_ecer;
     existing.nama_produk = normalizedNameUpper;
-    existing.is_active = false;
+    existing.is_active = true;
+    if (!existing.created_date_ts) {
+      existing.created_date_ts = new Date();
+    }
     existing.deleted_by = '-';
     existing.deleted_date = '-';
     existing.edited_by = '-';
@@ -64,8 +69,9 @@ export const createProduct = async (body: CreateProductBody): Promise<IProduct> 
     ...body,
     kode_produk: kodeProduk,
     nama_produk: normalizedNameUpper,
-    is_active: false,
+    is_active: true,
     created_date: formatGmt7(),
+    created_date_ts: new Date(),
     edited_by: '-',
     edited_date: '-',
     deleted_by: '-',
@@ -80,18 +86,18 @@ export const updateProduct = async (id: string, body: UpdateProductBody, actorNa
     ...(actorName ? { edited_by: actorName } : {}),
     edited_date: formatGmt7(),
   };
-  if (body.nama_produk) payload.nama_produk = body.nama_produk.trim().toUpperCase();
-  const product = await Product.findOneAndUpdate({ _id: id, is_active: false }, payload, { new: true, runValidators: true });
+  if (body.nama_produk) payload.nama_produk = normalizeProductName(body.nama_produk);
+  const product = await Product.findOneAndUpdate({ _id: id, is_active: true }, payload, { new: true, runValidators: true });
   if (!product) throw createError('Product not found', 404);
   return product;
 };
 
 export const deleteProduct = async (id: string, actorName?: string): Promise<void> => {
   const payload = {
-    is_active: true,
+    is_active: false,
     ...(actorName ? { deleted_by: actorName } : {}),
     deleted_date: formatGmt7(),
   };
-  const product = await Product.findOneAndUpdate({ _id: id, is_active: false }, payload, { new: true });
+  const product = await Product.findOneAndUpdate({ _id: id, is_active: true }, payload, { new: true });
   if (!product) throw createError('Product not found', 404);
 };

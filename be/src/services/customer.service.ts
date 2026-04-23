@@ -5,9 +5,12 @@ import { getPaginationParams, buildPaginatedResult } from '../utils/pagination';
 import { createError } from '../middlewares/error.middleware';
 import { formatGmt7 } from '../utils/date';
 
+const normalizeUpper = (value?: string): string => (value ?? '').trim().toUpperCase();
+const normalizeTrim = (value?: string): string => (value ?? '').trim();
+
 export const getAllCustomers = async (query: PaginationQuery): Promise<PaginatedResult<ICustomer>> => {
   const { page, limit, skip } = getPaginationParams(query);
-  const filter: FilterQuery<ICustomer> = { is_active: false };
+  const filter: FilterQuery<ICustomer> = { is_active: true };
   const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   if (query.nama_customer?.trim()) {
@@ -33,7 +36,7 @@ export const getAllCustomers = async (query: PaginationQuery): Promise<Paginated
   }
 
   const [items, total] = await Promise.all([
-    Customer.find(filter).skip(skip).limit(limit).sort({ created_date: -1 }),
+    Customer.find(filter).skip(skip).limit(limit).sort({ created_date_ts: -1, created_date: -1 }),
     Customer.countDocuments(filter),
   ]);
 
@@ -41,7 +44,9 @@ export const getAllCustomers = async (query: PaginationQuery): Promise<Paginated
 };
 
 export const createCustomer = async (body: CreateCustomerBody): Promise<ICustomer> => {
-  const normalizedName = body.nama_customer.trim();
+  const normalizedName = normalizeUpper(body.nama_customer);
+  const normalizedAddress = normalizeUpper(body.alamat);
+  const normalizedPhone = normalizeTrim(body.no_hp);
   const last = await Customer.findOne({
     kode_customer: { $regex: '^C\\d{8}$' },
   })
@@ -55,10 +60,11 @@ export const createCustomer = async (body: CreateCustomerBody): Promise<ICustome
   const customer = new Customer({
     kode_customer: kodeCustomer,
     nama_customer: normalizedName,
-    no_hp: body.no_hp ?? '',
-    alamat: body.alamat ?? '',
-    is_active: false,
+    no_hp: normalizedPhone,
+    alamat: normalizedAddress,
+    is_active: true,
     created_date: formatGmt7(),
+    created_date_ts: new Date(),
     edited_by: '-',
     edited_date: '-',
     deleted_by: '-',
@@ -73,17 +79,20 @@ export const updateCustomer = async (id: string, body: UpdateCustomerBody, actor
     ...(actorName ? { edited_by: actorName } : {}),
     edited_date: formatGmt7(),
   };
-  const customer = await Customer.findOneAndUpdate({ _id: id, is_active: false }, payload, { new: true, runValidators: true });
+  if (body.nama_customer !== undefined) payload.nama_customer = normalizeUpper(body.nama_customer);
+  if (body.alamat !== undefined) payload.alamat = normalizeUpper(body.alamat);
+  if (body.no_hp !== undefined) payload.no_hp = normalizeTrim(body.no_hp);
+  const customer = await Customer.findOneAndUpdate({ _id: id, is_active: true }, payload, { new: true, runValidators: true });
   if (!customer) throw createError('Customer not found', 404);
   return customer;
 };
 
 export const deleteCustomer = async (id: string, actorName?: string): Promise<void> => {
   const payload: any = {
-    is_active: true,
+    is_active: false,
     ...(actorName ? { deleted_by: actorName } : {}),
     deleted_date: formatGmt7(),
   };
-  const customer = await Customer.findOneAndUpdate({ _id: id, is_active: false }, payload, { new: true });
+  const customer = await Customer.findOneAndUpdate({ _id: id, is_active: true }, payload, { new: true });
   if (!customer) throw createError('Customer not found', 404);
 };

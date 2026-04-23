@@ -30,6 +30,7 @@ export interface PaginationQuery {
   nama_customer?: string;
   no_hp?: string;
   alamat?: string;
+  no_faktur?: string;
 }
 
 export interface PaginatedResult<T> {

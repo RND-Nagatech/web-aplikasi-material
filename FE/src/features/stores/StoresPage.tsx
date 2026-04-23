@@ -13,6 +13,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { TableSkeleton } from "@/components/common/TableSkeleton";
+import { TableFetchProgress } from "@/components/common/TableFetchProgress";
 import { TablePagination } from "@/components/common/TablePagination";
 import { ErrorState } from "@/components/common/States";
 import emptyDataIcon from "../../../assets/empty.svg";
@@ -29,7 +30,7 @@ const schema = z.object({
 const DEFAULT_PAGE_SIZE = 10;
 
 export default function StoresPage() {
-  const { data, isLoading, isError, refetch } = useStores();
+  const { data, isLoading, isFetching, isError, refetch } = useStores();
   const createMut = useCreateStore();
   const updateMut = useUpdateStore();
   const [editing, setEditing] = useState<null | { id: string; nama_toko: string; no_hp: string; alamat: string }>(null);
@@ -37,6 +38,7 @@ export default function StoresPage() {
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const canAddStore = (data?.length ?? 0) === 0;
 
   const form = useForm<StoreInput>({
     resolver: zodResolver(schema),
@@ -86,11 +88,14 @@ export default function StoresPage() {
               className="pl-8"
             />
           </div>
-          <Button className="rounded-none" onClick={() => { form.reset({ nama_toko: "", no_hp: "", alamat: "" }); setEditing(null); setOpen(true); }}>
-            <Plus className="mr-2 h-4 w-4" /> Tambah data
-          </Button>
+          {canAddStore && (
+            <Button className="rounded-none" onClick={() => { form.reset({ nama_toko: "", no_hp: "", alamat: "" }); setEditing(null); setOpen(true); }}>
+              <Plus className="mr-2 h-4 w-4" /> Tambah data
+            </Button>
+          )}
         </div>
 
+        <TableFetchProgress loading={isFetching && !isLoading} />
         {isLoading ? (
           <div className="bg-muted/20 p-6"><TableSkeleton /></div>
         ) : isError ? (
@@ -172,6 +177,10 @@ export default function StoresPage() {
                   await updateMut.mutateAsync({ id: editing.id, input: values });
                   toast.success("Data toko diperbarui");
                 } else {
+                  if (!canAddStore) {
+                    toast.error("Data toko sudah tersedia. Silakan edit data yang ada.");
+                    return;
+                  }
                   await createMut.mutateAsync(values);
                   toast.success("Data toko ditambahkan");
                 }

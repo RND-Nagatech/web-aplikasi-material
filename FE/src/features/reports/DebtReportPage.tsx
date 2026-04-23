@@ -9,15 +9,15 @@ import {
 } from "@/components/ui/table";
 // PageHeader not used; layout follows unified Card pattern
 import { TableSkeleton } from "@/components/common/TableSkeleton";
+import { TableFetchProgress } from "@/components/common/TableFetchProgress";
 import { TablePagination } from "@/components/common/TablePagination";
 import { EmptyState, ErrorState } from "@/components/common/States";
 import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
 import { reportsService } from "@/services/reports";
 import { storesService } from "@/services/stores";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import type { RowInput } from "jspdf-autotable";
-import ExcelJS from "exceljs";
+import { getPdfEngine } from "./export-engine/lazy";
+import { exportExcelWithWorker } from "./export-engine/excel-worker.client";
 import searchDataIcon from "../../../assets/cari data.svg";
 import emptyDataIcon from "../../../assets/empty.svg";
 
@@ -44,16 +44,15 @@ export default function DebtReportPage() {
     queryFn: storesService.list,
   });
 
-  const items = debtQ.data?.items ?? [];
-
   const filtered = useMemo(() => {
+    const items = debtQ.data?.items ?? [];
     const q = search.trim().toLowerCase();
     return q
       ? items.filter((it) =>
         (it.customerName ?? "").toLowerCase().includes(q)
         || (it.transactionId ?? "").toLowerCase().includes(q))
       : items;
-  }, [items, search]);
+  }, [debtQ.data?.items, search]);
 
   const totalItems = filtered.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
@@ -94,33 +93,25 @@ export default function DebtReportPage() {
 
   const canExport = submittedFilter !== null && !debtQ.isLoading && !debtQ.isFetching && !debtQ.isError && filtered.length > 0;
 
-  const exportPdf = () => {
+  const exportPdf = async () => {
+    const pdf = await getPdfEngine();
     const store = storesQ.data?.[0];
     const reportDateFrom = (submittedFilter?.dateFrom ?? dateFrom).slice(0, 10);
     const reportDateTo = (submittedFilter?.dateTo ?? dateTo).slice(0, 10);
 
-    const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
-    const pageWidth = doc.internal.pageSize.getWidth();
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(18);
-    doc.text((store?.nama_toko ?? "-").toUpperCase(), 40, 50);
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(11);
-    doc.text(`Alamat : ${(store?.alamat ?? "-").toUpperCase()}`, 40, 70);
-    doc.text(`No HP  : ${store?.no_hp ?? "-"}`, 40, 86);
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(18);
-    doc.text("LAPORAN PIUTANG", pageWidth - 40, 50, { align: "right" });
-    doc.setFontSize(13);
-    doc.text(`TANGGAL : ${reportDateFrom} s/d ${reportDateTo}`, pageWidth - 40, 72, { align: "right" });
+    const doc = pdf.createLandscapePdf();
+    pdf.drawStandardReportHeader(doc, {
+      store,
+      title: "LAPORAN PIUTANG",
+      dateFrom: reportDateFrom,
+      dateTo: reportDateTo,
+    });
 
     const tableBody: RowInput[] = filtered.map((item, index) => [
       String(index + 1),
       item.transactionId ?? "-",
       item.customerName ?? "-",
+      item.customerCode ?? "-",
       formatDate(item.createdAt),
       formatCurrency(item.total),
       formatCurrency(item.paid),
@@ -132,194 +123,51 @@ export default function DebtReportPage() {
     const remainingSum = filtered.reduce((s, it) => s + (it.remaining ?? 0), 0);
 
     tableBody.push([
-      { content: `GRAND TOTAL : ${totalItems}`, colSpan: 3, styles: { halign: "left", fontStyle: "bold" } },
-      { content: "", styles: { halign: "left" } },
+      { content: `GRAND TOTAL : ${totalItems}`, colSpan: 5, styles: { halign: "left", fontStyle: "bold" } },
       { content: formatCurrency(totalSum), styles: { halign: "right", fontStyle: "bold" } },
       { content: formatCurrency(paidSum), styles: { halign: "right", fontStyle: "bold" } },
       { content: formatCurrency(remainingSum), styles: { halign: "right", fontStyle: "bold" } },
     ]);
 
-    autoTable(doc, {
-      startY: 110,
-      head: [["No", "No Faktur", "Pelanggan", "Tanggal", "Total", "Dibayar", "Sisa"]],
+    pdf.renderReportTablePdf(doc, {
+      head: [["No", "No Faktur", "Pelanggan", "Kode Customer", "Tanggal", "Total", "Dibayar", "Sisa"]],
       body: tableBody,
-      theme: "grid",
-      styles: {
-        font: "helvetica",
-        fontSize: 10,
-        cellPadding: 6,
-        lineColor: [180, 180, 180],
-        lineWidth: 0.4,
-      },
-      headStyles: {
-        fillColor: [230, 230, 230],
-        textColor: [20, 20, 20],
-        fontStyle: "bold",
-      },
-      columnStyles: {
-        0: { halign: "center", cellWidth: 56 },
-        3: { halign: "center", cellWidth: 100 },
-        4: { halign: "right", cellWidth: 110 },
-        5: { halign: "right", cellWidth: 110 },
-        6: { halign: "right", cellWidth: 110 },
-      },
-      didParseCell: (data) => {
-        const isGrandTotalRow = data.section === "body" && data.row.index === tableBody.length - 1;
-        if (isGrandTotalRow) {
-          data.cell.styles.fillColor = [245, 245, 245];
-          data.cell.styles.fontStyle = "bold";
-        }
+      autoTableOptions: {
+        columnStyles: {
+          0: { halign: "center", cellWidth: 56 },
+          4: { halign: "center", cellWidth: 100 },
+          5: { halign: "right", cellWidth: 110 },
+          6: { halign: "right", cellWidth: 110 },
+          7: { halign: "right", cellWidth: 110 },
+        },
       },
     });
 
-    const printedDate = new Date().toLocaleDateString("id-ID");
-    const footerY = ((doc as any).lastAutoTable?.finalY ?? 120) + 20;
-    doc.setFont("helvetica", "italic");
-    doc.setFontSize(10);
-    doc.text(`Print Date : ${printedDate}`, 40, footerY);
-
-    doc.save("LAPORAN PIUTANG.pdf");
+    pdf.drawPdfPrintDate(doc);
+    pdf.savePdfFile(doc, "LAPORAN PIUTANG.pdf");
   };
 
   const exportExcel = async () => {
     const store = storesQ.data?.[0];
     const reportDateFrom = (submittedFilter?.dateFrom ?? dateFrom).slice(0, 10);
     const reportDateTo = (submittedFilter?.dateTo ?? dateTo).slice(0, 10);
-
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet("LAPORAN PIUTANG");
-
-    worksheet.columns = [
-      { width: 8 },
-      { width: 22 },
-      { width: 34 },
-      { width: 18 },
-      { width: 18 },
-      { width: 18 },
-      { width: 22 },
-    ];
-
-    worksheet.mergeCells("A1:G1");
-    worksheet.getCell("A1").value = "LAPORAN PIUTANG";
-    worksheet.getCell("A1").font = { bold: true, size: 16 };
-    worksheet.getCell("A1").alignment = { horizontal: "center", vertical: "middle" };
-
-    worksheet.mergeCells("A2:G2");
-    worksheet.getCell("A2").value = `Tanggal : ${reportDateFrom} s/d ${reportDateTo}`;
-    worksheet.getCell("A2").font = { bold: true, size: 12 };
-    worksheet.getCell("A2").alignment = { horizontal: "center", vertical: "middle" };
-
-    worksheet.mergeCells("A3:G3");
-    worksheet.getCell("A3").value = `${store?.nama_toko ?? "-"}`;
-    worksheet.getCell("A3").font = { bold: true, size: 12 };
-    worksheet.getCell("A3").alignment = { horizontal: "center", vertical: "middle" };
-
-    const headerRow = worksheet.addRow(["No", "No Faktur", "Pelanggan", "Tanggal", "Total", "Dibayar", "Sisa"]);
-    const headerRowNumber = headerRow.number;
-    headerRow.eachCell((cell) => {
-      cell.font = { bold: true };
-      cell.alignment = { horizontal: "center", vertical: "middle" };
-      cell.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FFE5E5E5" },
-      };
-      cell.border = {
-        top: { style: "thin", color: { argb: "FFBFBFBF" } },
-        left: { style: "thin", color: { argb: "FFBFBFBF" } },
-        bottom: { style: "thin", color: { argb: "FFBFBFBF" } },
-        right: { style: "thin", color: { argb: "FFBFBFBF" } },
-      };
+    await exportExcelWithWorker({
+      kind: "debt",
+      fileName: "LAPORAN PIUTANG.xlsx",
+      title: "LAPORAN PIUTANG",
+      dateFrom: reportDateFrom,
+      dateTo: reportDateTo,
+      storeName: store?.nama_toko,
+      items: filtered.map((item) => ({
+        transactionId: item.transactionId,
+        customerName: item.customerName,
+        customerCode: item.customerCode,
+        createdAt: item.createdAt,
+        total: item.total,
+        paid: item.paid,
+        remaining: item.remaining,
+      })),
     });
-
-    filtered.forEach((item, index) => {
-      const row = worksheet.addRow([
-        index + 1,
-        item.transactionId ?? "-",
-        item.customerName ?? "-",
-        formatDate(item.createdAt),
-        item.total ?? 0,
-        item.paid ?? 0,
-        item.remaining ?? 0,
-      ]);
-      row.getCell(1).alignment = { horizontal: "center" };
-      row.getCell(4).alignment = { horizontal: "center" };
-      row.getCell(5).alignment = { horizontal: "right" };
-      row.getCell(6).alignment = { horizontal: "right" };
-      row.getCell(7).alignment = { horizontal: "right" };
-      row.getCell(5).numFmt = '"Rp" #,##0';
-      row.getCell(6).numFmt = '"Rp" #,##0';
-      row.getCell(7).numFmt = '"Rp" #,##0';
-      row.eachCell((cell) => {
-        cell.border = {
-          top: { style: "thin", color: { argb: "FFBFBFBF" } },
-          left: { style: "thin", color: { argb: "FFBFBFBF" } },
-          bottom: { style: "thin", color: { argb: "FFBFBFBF" } },
-          right: { style: "thin", color: { argb: "FFBFBFBF" } },
-        };
-      });
-    });
-
-    const totalSum = filtered.reduce((s, it) => s + (it.total ?? 0), 0);
-    const paidSum = filtered.reduce((s, it) => s + (it.paid ?? 0), 0);
-    const remainingSum = filtered.reduce((s, it) => s + (it.remaining ?? 0), 0);
-
-    const grandTotalRow = worksheet.addRow([
-      `GRAND TOTAL : ${totalItems}`,
-      "",
-      "",
-      "",
-      totalSum,
-      paidSum,
-      remainingSum,
-    ]);
-    worksheet.mergeCells(`A${grandTotalRow.number}:C${grandTotalRow.number}`);
-    grandTotalRow.getCell(1).font = { bold: true };
-    grandTotalRow.getCell(1).alignment = { horizontal: "left" };
-    grandTotalRow.getCell(5).alignment = { horizontal: "right" };
-    grandTotalRow.getCell(6).alignment = { horizontal: "right" };
-    grandTotalRow.getCell(7).alignment = { horizontal: "right" };
-    grandTotalRow.getCell(5).font = { bold: true };
-    grandTotalRow.getCell(6).font = { bold: true };
-    grandTotalRow.getCell(7).font = { bold: true };
-    grandTotalRow.getCell(5).numFmt = '"Rp" #,##0';
-    grandTotalRow.getCell(6).numFmt = '"Rp" #,##0';
-    grandTotalRow.getCell(7).numFmt = '"Rp" #,##0';
-    grandTotalRow.eachCell((cell) => {
-      cell.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FFF3F3F3" },
-      };
-      cell.border = {
-        top: { style: "thin", color: { argb: "FFBFBFBF" } },
-        left: { style: "thin", color: { argb: "FFBFBFBF" } },
-        bottom: { style: "thin", color: { argb: "FFBFBFBF" } },
-        right: { style: "thin", color: { argb: "FFBFBFBF" } },
-      };
-    });
-
-    const printDateRow = worksheet.addRow([`Print Date : ${new Date().toLocaleDateString("id-ID")}`]);
-    worksheet.mergeCells(`A${printDateRow.number}:G${printDateRow.number}`);
-    printDateRow.getCell(1).font = { italic: true, size: 10 };
-    printDateRow.getCell(1).alignment = { horizontal: "left" };
-
-    for (let i = 1; i <= 3; i += 1) {
-      worksheet.getRow(i).height = 22;
-    }
-    worksheet.getRow(headerRowNumber).height = 24;
-    worksheet.views = [{ state: "frozen", ySplit: headerRowNumber }];
-
-    const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "LAPORAN PIUTANG.xlsx";
-    link.click();
-    URL.revokeObjectURL(url);
   };
 
   return (
@@ -351,6 +199,7 @@ export default function DebtReportPage() {
         {filterError && (
           <div className="border-b border-border bg-background px-6 pb-4 text-sm text-destructive">{filterError}</div>
         )}
+        <TableFetchProgress loading={debtQ.isFetching && !debtQ.isLoading} />
 
         <div className="p-6">
           <div className="border border-border bg-muted/20">
@@ -367,7 +216,7 @@ export default function DebtReportPage() {
                 <img src={searchDataIcon} alt="Cari data laporan" className="h-64 w-64 object-contain" />
                 <p>Silahkan cari data untuk menampilkan laporan</p>
               </div>
-            ) : debtQ.isLoading || debtQ.isFetching ? (
+            ) : debtQ.isLoading ? (
               <div className="p-6"><TableSkeleton rows={6} cols={5} /></div>
             ) : debtQ.isError || !debtQ.data ? (
               <div className="p-6"><ErrorState message="Gagal memuat laporan piutang." onRetry={() => void debtQ.refetch()} /></div>
@@ -383,7 +232,8 @@ export default function DebtReportPage() {
                   <TableHeader>
                     <TableRow className="bg-muted/50 hover:bg-muted/50">
                       <TableHead className="font-semibold text-foreground">No Faktur</TableHead>
-                      <TableHead className="font-semibold text-foreground">Pelanggan</TableHead>
+                      <TableHead className="font-semibold text-foreground">Nama</TableHead>
+                      <TableHead className="font-semibold text-foreground">Kode Customer</TableHead>
                       <TableHead className="font-semibold text-foreground">Tanggal</TableHead>
                       <TableHead className="text-right font-semibold text-foreground">Total</TableHead>
                       <TableHead className="text-right font-semibold text-foreground">Dibayar</TableHead>
@@ -394,7 +244,8 @@ export default function DebtReportPage() {
                     {paginated.map((item) => (
                       <TableRow key={item.id}>
                         <TableCell className="font-medium">{item.transactionId ?? "-"}</TableCell>
-                        <TableCell className="font-medium">{item.customerName ?? "—"}</TableCell>
+                        <TableCell className="font-medium">{(item.customerName ?? "").toUpperCase() || "—"}</TableCell>
+                        <TableCell className="font-medium">{item.customerCode ?? "-"}</TableCell>
                         <TableCell className="text-muted-foreground">{formatDate(item.createdAt)}</TableCell>
                         <TableCell className="text-right tabular-nums">{formatCurrency(item.total)}</TableCell>
                         <TableCell className="text-right tabular-nums">{formatCurrency(item.paid)}</TableCell>
@@ -413,7 +264,7 @@ export default function DebtReportPage() {
                     <Button
                       type="button"
                       className={`w-full rounded-none ${canExport ? "bg-red-600 text-white hover:bg-red-700" : "bg-red-300 text-white"}`}
-                      onClick={exportPdf}
+                      onClick={() => { void exportPdf(); }}
                       disabled={!canExport}
                     >
                       Export PDF

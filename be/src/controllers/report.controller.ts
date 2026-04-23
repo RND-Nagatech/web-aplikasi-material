@@ -1,127 +1,34 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 import { sendSuccess } from '../utils/response';
 import { getDebtReport, getFinanceReport, getPayableReport, getStockReport } from '../services/report.service';
-import { createError } from '../middlewares/error.middleware';
+import { asyncHandler } from '../utils/async-handler';
+import { parseDateRangeQuery, parseFinanceType } from '../utils/request';
 
-export const stock = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const rawDateFrom = typeof req.query.date_from === 'string' ? req.query.date_from : undefined;
-    const rawDateTo = typeof req.query.date_to === 'string' ? req.query.date_to : undefined;
+export const stock = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const { dateFrom, dateTo } = parseDateRangeQuery(req);
+  const result = await getStockReport(dateFrom, dateTo);
+  sendSuccess(res, 'Stock report retrieved successfully', result);
+});
 
-    const dateFrom = rawDateFrom ? new Date(rawDateFrom) : undefined;
-    const dateTo = rawDateTo ? new Date(rawDateTo) : undefined;
+export const debts = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const { dateFrom, dateTo } = parseDateRangeQuery(req);
+  const noFaktur = typeof req.query.no_faktur === 'string' ? req.query.no_faktur : undefined;
+  const result = await getDebtReport(dateFrom, dateTo, noFaktur);
+  sendSuccess(res, 'Debt report retrieved successfully', result);
+});
 
-    if (dateFrom && Number.isNaN(dateFrom.getTime())) {
-      throw createError('date_from is invalid, expected YYYY-MM-DD', 400);
-    }
-    if (dateTo && Number.isNaN(dateTo.getTime())) {
-      throw createError('date_to is invalid, expected YYYY-MM-DD', 400);
-    }
+export const payables = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const { dateFrom, dateTo } = parseDateRangeQuery(req);
+  const noFaktur = typeof req.query.no_faktur === 'string' ? req.query.no_faktur : undefined;
+  const result = await getPayableReport(dateFrom, dateTo, noFaktur);
+  sendSuccess(res, 'Payable report retrieved successfully', result);
+});
 
-    if (dateTo) {
-      dateTo.setHours(23, 59, 59, 999);
-    }
+export const finance = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const { dateFrom, dateTo } = parseDateRangeQuery(req);
+  const reportType = parseFinanceType(req.query.type);
+  const search = typeof req.query.search === 'string' ? req.query.search : undefined;
 
-    if (dateFrom && dateTo && dateFrom > dateTo) {
-      throw createError('date_from must be earlier than or equal to date_to', 400);
-    }
-
-    const result = await getStockReport(dateFrom, dateTo);
-    sendSuccess(res, 'Stock report retrieved successfully', result);
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const debts = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const rawDateFrom = typeof req.query.date_from === 'string' ? req.query.date_from : undefined;
-    const rawDateTo = typeof req.query.date_to === 'string' ? req.query.date_to : undefined;
-
-    const dateFrom = rawDateFrom ? new Date(rawDateFrom) : undefined;
-    const dateTo = rawDateTo ? new Date(rawDateTo) : undefined;
-
-    if (dateFrom && Number.isNaN(dateFrom.getTime())) {
-      throw createError('date_from is invalid, expected YYYY-MM-DD', 400);
-    }
-    if (dateTo && Number.isNaN(dateTo.getTime())) {
-      throw createError('date_to is invalid, expected YYYY-MM-DD', 400);
-    }
-
-    if (dateTo) {
-      dateTo.setHours(23, 59, 59, 999);
-    }
-
-    if (dateFrom && dateTo && dateFrom > dateTo) {
-      throw createError('date_from must be earlier than or equal to date_to', 400);
-    }
-
-    const result = await getDebtReport(dateFrom, dateTo);
-    sendSuccess(res, 'Debt report retrieved successfully', result);
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const payables = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const rawDateFrom = typeof req.query.date_from === 'string' ? req.query.date_from : undefined;
-    const rawDateTo = typeof req.query.date_to === 'string' ? req.query.date_to : undefined;
-
-    const dateFrom = rawDateFrom ? new Date(rawDateFrom) : undefined;
-    const dateTo = rawDateTo ? new Date(rawDateTo) : undefined;
-
-    if (dateFrom && Number.isNaN(dateFrom.getTime())) {
-      throw createError('date_from is invalid, expected YYYY-MM-DD', 400);
-    }
-    if (dateTo && Number.isNaN(dateTo.getTime())) {
-      throw createError('date_to is invalid, expected YYYY-MM-DD', 400);
-    }
-
-    if (dateTo) {
-      dateTo.setHours(23, 59, 59, 999);
-    }
-
-    if (dateFrom && dateTo && dateFrom > dateTo) {
-      throw createError('date_from must be earlier than or equal to date_to', 400);
-    }
-
-    const result = await getPayableReport(dateFrom, dateTo);
-    sendSuccess(res, 'Payable report retrieved successfully', result);
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const finance = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const rawDateFrom = typeof req.query.date_from === 'string' ? req.query.date_from : undefined;
-    const rawDateTo = typeof req.query.date_to === 'string' ? req.query.date_to : undefined;
-    const reportType = typeof req.query.type === 'string' ? req.query.type : 'rekap';
-    const search = typeof req.query.search === 'string' ? req.query.search : undefined;
-
-    const dateFrom = rawDateFrom ? new Date(rawDateFrom) : undefined;
-    const dateTo = rawDateTo ? new Date(rawDateTo) : undefined;
-
-    if (dateFrom && Number.isNaN(dateFrom.getTime())) {
-      throw createError('date_from is invalid, expected YYYY-MM-DD', 400);
-    }
-    if (dateTo && Number.isNaN(dateTo.getTime())) {
-      throw createError('date_to is invalid, expected YYYY-MM-DD', 400);
-    }
-    if (dateTo) {
-      dateTo.setHours(23, 59, 59, 999);
-    }
-    if (dateFrom && dateTo && dateFrom > dateTo) {
-      throw createError('date_from must be earlier than or equal to date_to', 400);
-    }
-    if (!['rekap', 'detail'].includes(reportType)) {
-      throw createError('type must be either "rekap" or "detail"', 400);
-    }
-
-    const result = await getFinanceReport(reportType as 'rekap' | 'detail', dateFrom, dateTo, search);
-    sendSuccess(res, 'Finance report retrieved successfully', result);
-  } catch (error) {
-    next(error);
-  }
-};
+  const result = await getFinanceReport(reportType, dateFrom, dateTo, search);
+  sendSuccess(res, 'Finance report retrieved successfully', result);
+});

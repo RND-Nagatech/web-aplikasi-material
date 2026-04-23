@@ -8,9 +8,12 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
+    "lint:advisory": "eslint . || true",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "quality:gate": "npm run lint && npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

@@ -42,6 +42,7 @@ type ApiProduct = {
 };
 type ApiCustomer = {
   _id: string;
+  kode_customer?: string;
   nama_customer: string;
   no_hp?: string;
   alamat?: string;
@@ -73,6 +74,7 @@ type ApiTransactionItem = {
 type ApiTransaction = {
   _id: string;
   type: "jual" | "beli";
+  type_trx?: string;
   customer?: string;
   nama_customer: string;
   no_hp: string;
@@ -302,7 +304,7 @@ export const handlers = [
   http.get(`${BASE}/products`, ({ request }) => {
     const u = new URL(request.url);
     const search = (u.searchParams.get("search") || "").trim().toLowerCase();
-    const activeProducts = db.products.filter((p) => !p.is_active);
+    const activeProducts = db.products.filter((p) => p.is_active);
     const filtered = search
       ? activeProducts.filter((p) => p.nama_produk.toLowerCase().includes(search))
       : activeProducts;
@@ -322,11 +324,11 @@ export const handlers = [
     const normalizedName = body.nama_produk.trim().toLowerCase();
     const existing = db.products.find((p) => p.nama_produk.trim().toLowerCase() === normalizedName);
 
-    if (existing && !existing.is_active) {
+    if (existing && existing.is_active) {
       return fail("Nama produk sudah digunakan", 409);
     }
 
-    if (existing && existing.is_active) {
+    if (existing && !existing.is_active) {
       if (!body.restore_existing) {
         return fail("RESTORE_CONFIRMATION_REQUIRED", 409);
       }
@@ -334,7 +336,7 @@ export const handlers = [
       existing.harga_grosir = Number(body.harga_grosir);
       existing.harga_ecer = Number(body.harga_ecer);
       existing.nama_produk = (body.nama_produk || existing.nama_produk).trim().toUpperCase();
-      existing.is_active = false;
+      existing.is_active = true;
       existing.deleted_by = "-";
       existing.deleted_date = "-";
       existing.edited_date = nowGmt7();
@@ -348,7 +350,7 @@ export const handlers = [
       stock_on_hand: Number(body.stock_on_hand),
       harga_grosir: Number(body.harga_grosir),
       harga_ecer: Number(body.harga_ecer),
-      is_active: false,
+      is_active: true,
       created_date: nowGmt7(),
       edited_by: "-",
       edited_date: "-",
@@ -362,7 +364,7 @@ export const handlers = [
   }),
 
   http.put(`${BASE}/products/:id`, async ({ params, request }) => {
-    const idx = db.products.findIndex((p) => p._id === params.id && !p.is_active);
+    const idx = db.products.findIndex((p) => p._id === params.id && p.is_active);
     if (idx === -1) return fail("Product not found", 404);
     const body = (await request.json()) as Partial<ApiProduct>;
     const auth = request.headers.get("authorization");
@@ -380,14 +382,14 @@ export const handlers = [
   }),
 
   http.delete(`${BASE}/products/:id`, ({ params, request }) => {
-    const idx = db.products.findIndex((p) => p._id === params.id && !p.is_active);
+    const idx = db.products.findIndex((p) => p._id === params.id && p.is_active);
     if (idx === -1) return fail("Product not found", 404);
     const auth = request.headers.get("authorization");
     const actorId = auth?.startsWith("Bearer ") ? auth.replace("Bearer ", "").replace("mock-jwt-", "") : undefined;
     const actorName = actorId ? db.users.find((u) => u._id === actorId)?.name : undefined;
     db.products[idx] = {
       ...db.products[idx],
-      is_active: true,
+      is_active: false,
       deleted_by: actorName,
       deleted_date: nowGmt7(),
       updatedAt: now(),
@@ -401,7 +403,7 @@ export const handlers = [
     const namaCustomer = (u.searchParams.get("nama_customer") || "").trim().toLowerCase();
     const noHp = (u.searchParams.get("no_hp") || "").trim().toLowerCase();
     const alamat = (u.searchParams.get("alamat") || "").trim().toLowerCase();
-    const active = db.customers.filter((c) => !c.is_active);
+    const active = db.customers.filter((c) => c.is_active);
     const filtered = active.filter((c) => {
       const name = (c.nama_customer || "").toLowerCase();
       const phone = (c.no_hp || "").toLowerCase();
@@ -422,15 +424,15 @@ export const handlers = [
     const normalized = (body.nama_customer || "").trim().toLowerCase();
     const existing = db.customers.find((c) => c.nama_customer.trim().toLowerCase() === normalized);
 
-    if (existing && !existing.is_active) {
+    if (existing && existing.is_active) {
       return fail("Nama customer sudah digunakan", 409);
     }
 
-    if (existing && existing.is_active) {
+    if (existing && !existing.is_active) {
       if (!body.restore_existing) return fail("RESTORE_CONFIRMATION_REQUIRED", 409);
       existing.no_hp = body.no_hp || existing.no_hp;
       existing.alamat = body.alamat || existing.alamat;
-      existing.is_active = false;
+      existing.is_active = true;
       existing.deleted_by = "-";
       existing.deleted_date = "-";
       existing.edited_by = "-";
@@ -444,7 +446,7 @@ export const handlers = [
       nama_customer: body.nama_customer,
       no_hp: body.no_hp || "",
       alamat: body.alamat || "",
-      is_active: false,
+      is_active: true,
       created_date: nowGmt7(),
       edited_by: "-",
       edited_date: "-",
@@ -458,7 +460,7 @@ export const handlers = [
   }),
 
   http.put(`${BASE}/customers/:id`, async ({ params, request }) => {
-    const idx = db.customers.findIndex((c) => c._id === params.id && !c.is_active);
+    const idx = db.customers.findIndex((c) => c._id === params.id && c.is_active);
     if (idx === -1) return fail("Customer not found", 404);
     const body = (await request.json()) as Partial<ApiCustomer>;
     const auth = request.headers.get("authorization");
@@ -475,14 +477,14 @@ export const handlers = [
   }),
 
   http.delete(`${BASE}/customers/:id`, ({ params, request }) => {
-    const idx = db.customers.findIndex((c) => c._id === params.id && !c.is_active);
+    const idx = db.customers.findIndex((c) => c._id === params.id && c.is_active);
     if (idx === -1) return fail("Customer not found", 404);
     const auth = request.headers.get("authorization");
     const actorId = auth?.startsWith("Bearer ") ? auth.replace("Bearer ", "").replace("mock-jwt-", "") : undefined;
     const actorName = actorId ? db.users.find((u) => u._id === actorId)?.name : undefined;
     db.customers[idx] = {
       ...db.customers[idx],
-      is_active: true,
+      is_active: false,
       deleted_by: actorName || db.customers[idx].deleted_by,
       deleted_date: nowGmt7(),
       updatedAt: now(),
@@ -583,7 +585,7 @@ export const handlers = [
     if (paid < 0) return fail("paid must be a number >= 0", 400);
 
     for (const item of body.items) {
-      const product = db.products.find((p) => p._id === item.product && !p.is_active);
+      const product = db.products.find((p) => p._id === item.product && p.is_active);
       if (!product) return fail(`Product ${item.product} not found`, 404);
       if (body.type === "jual") {
         if (product.stock_on_hand < item.qty) return fail(`Insufficient stock for product: ${product.nama_produk}`, 400);
@@ -751,7 +753,7 @@ export const handlers = [
     if (parsedTo) parsedTo.setHours(23, 59, 59, 999);
 
     const items = db.products
-      .filter((item) => !item.is_active)
+      .filter((item) => item.is_active)
       .filter((item) => {
         const createdAt = new Date(item.createdAt);
         if (parsedFrom && createdAt < parsedFrom) return false;

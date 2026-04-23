@@ -30,5 +30,34 @@ export default defineConfig(({ mode }) => {
       },
       dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime", "@tanstack/react-query", "@tanstack/query-core"],
     },
+    build: {
+      chunkSizeWarningLimit: 900,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes("node_modules")) return undefined;
+            if (id.includes("exceljs")) {
+              return "excel-vendor";
+            }
+            if (id.includes("jspdf") || id.includes("jspdf-autotable") || id.includes("html2canvas")) {
+              return "pdf-vendor";
+            }
+            if (id.includes("recharts")) {
+              return "charts";
+            }
+            if (id.includes("@tanstack")) {
+              return "react-query";
+            }
+            if (id.includes("react-router-dom")) {
+              return "router";
+            }
+            if (id.includes("react") || id.includes("scheduler")) {
+              return "react-vendor";
+            }
+            return "vendor";
+          },
+        },
+      },
+    },
   };
 });

@@ -26,6 +26,13 @@ const mapCustomer = (item: ApiCustomer): Customer => ({
   createdAt: item.created_date ?? item.createdAt,
 });
 
+const toApiInput = (input: CustomerInput): CustomerInput => ({
+  ...input,
+  nama_customer: input.nama_customer.trim().toUpperCase(),
+  no_hp: input.no_hp?.trim() ?? "",
+  alamat: input.alamat?.trim().toUpperCase() ?? "",
+});
+
 export const customersService = {
   list: () =>
     apiClient
@@ -33,11 +40,11 @@ export const customersService = {
       .then((r) => unwrapData(r.data).items.map(mapCustomer)),
   create: (input: CustomerInput) =>
     apiClient
-      .post<ApiEnvelope<ApiCustomer>>("/customers", input)
+      .post<ApiEnvelope<ApiCustomer>>("/customers", toApiInput(input))
       .then((r) => mapCustomer(unwrapData(r.data))),
   update: (id: string, input: CustomerInput) =>
     apiClient
-      .put<ApiEnvelope<ApiCustomer>>(`/customers/${id}`, input)
+      .put<ApiEnvelope<ApiCustomer>>(`/customers/${id}`, toApiInput(input))
       .then((r) => mapCustomer(unwrapData(r.data))),
   remove: (id: string) => apiClient.delete(`/customers/${id}`).then((r) => unwrapData(r.data)),
   searchPaged: (params: {

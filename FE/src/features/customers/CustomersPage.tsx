@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 // PageHeader not used; layout follows the styling guide inside a unified Card
 import { TableSkeleton } from "@/components/common/TableSkeleton";
+import { TableFetchProgress } from "@/components/common/TableFetchProgress";
 import { TablePagination } from "@/components/common/TablePagination";
 import { ErrorState } from "@/components/common/States";
 import emptyDataIcon from "../../../assets/empty.svg";
@@ -40,7 +41,7 @@ const schema = z.object({
 const DEFAULT_PAGE_SIZE = 10;
 
 export default function CustomersPage() {
-  const { data, isLoading, isError, refetch } = useCustomers();
+  const { data, isLoading, isFetching, isError, refetch } = useCustomers();
   const createMut = useCreateCustomer();
   const updateMut = useUpdateCustomer();
   const deleteMut = useDeleteCustomer();
@@ -61,6 +62,7 @@ export default function CustomersPage() {
     const q = search.trim().toLowerCase();
     return q
       ? data.filter((c) => (c.nama_customer ?? "").toLowerCase().includes(q)
+        || (c.kodeCustomer ?? "").toLowerCase().includes(q)
         || (c.no_hp ?? "").toLowerCase().includes(q)
         || (c.alamat ?? "").toLowerCase().includes(q))
       : data;
@@ -103,6 +105,7 @@ export default function CustomersPage() {
           </Button>
         </div>
 
+        <TableFetchProgress loading={isFetching && !isLoading} />
         {isLoading ? (
           <div className="bg-muted/20 p-6"><TableSkeleton /></div>
         ) : isError ? (
@@ -121,17 +124,19 @@ export default function CustomersPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
-                    <TableHead className="font-semibold text-foreground">Nama</TableHead>
-                    <TableHead className="font-semibold text-foreground">Telepon</TableHead>
-                    <TableHead className="font-semibold text-foreground">Alamat</TableHead>
-                    <TableHead className="font-semibold text-foreground">Ditambahkan</TableHead>
+                      <TableHead className="font-semibold text-foreground">Kode</TableHead>
+                      <TableHead className="font-semibold text-foreground">Nama</TableHead>
+                      <TableHead className="font-semibold text-foreground">Telepon</TableHead>
+                      <TableHead className="font-semibold text-foreground">Alamat</TableHead>
+                      <TableHead className="font-semibold text-foreground">Ditambahkan</TableHead>
                     <TableHead className="w-24 font-semibold text-foreground">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {paginated.map((c) => (
                     <TableRow key={c.id}>
-                      <TableCell className="font-medium">{c.nama_customer}</TableCell>
+                        <TableCell className="font-medium">{c.kodeCustomer ?? "-"}</TableCell>
+                        <TableCell className="font-medium">{c.nama_customer}</TableCell>
                       <TableCell className="text-muted-foreground">{c.no_hp || "—"}</TableCell>
                       <TableCell className="text-muted-foreground">{c.alamat || "—"}</TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(c.createdAt ?? "")}</TableCell>
@@ -188,7 +193,16 @@ export default function CustomersPage() {
           >
             <div className="space-y-2">
               <Label htmlFor="nama_customer">Nama</Label>
-              <Input id="nama_customer" {...form.register("nama_customer")} />
+              <Input
+                id="nama_customer"
+                value={form.watch("nama_customer") ?? ""}
+                onChange={(e) =>
+                  form.setValue("nama_customer", e.target.value.toUpperCase(), {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  })
+                }
+              />
               {form.formState.errors.nama_customer && <p className="text-xs text-destructive">{form.formState.errors.nama_customer.message}</p>}
             </div>
             <div className="space-y-2">
@@ -198,7 +212,16 @@ export default function CustomersPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="alamat">Alamat</Label>
-              <Input id="alamat" {...form.register("alamat")} />
+              <Input
+                id="alamat"
+                value={form.watch("alamat") ?? ""}
+                onChange={(e) =>
+                  form.setValue("alamat", e.target.value.toUpperCase(), {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  })
+                }
+              />
               {form.formState.errors.alamat && <p className="text-xs text-destructive">{form.formState.errors.alamat.message}</p>}
             </div>
             <DialogFooter>

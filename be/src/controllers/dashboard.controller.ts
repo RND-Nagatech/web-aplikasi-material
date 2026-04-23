@@ -1,14 +1,11 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 import { getDashboardSummary } from '../services/dashboard.service';
 import { sendSuccess } from '../utils/response';
+import { asyncHandler } from '../utils/async-handler';
+import { parseDashboardPeriod } from '../utils/request';
 
-export const summary = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const periodRaw = String(req.query.period ?? '7');
-    const period = periodRaw === '30' ? 30 : 7;
-    const result = await getDashboardSummary(period);
-    sendSuccess(res, 'Dashboard summary retrieved successfully', result);
-  } catch (error) {
-    next(error);
-  }
-};
+export const summary = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const period = parseDashboardPeriod(req.query.period);
+  const result = await getDashboardSummary(period);
+  sendSuccess(res, 'Dashboard summary retrieved successfully', result);
+});

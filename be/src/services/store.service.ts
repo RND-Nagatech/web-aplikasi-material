@@ -55,7 +55,7 @@ export const getAllStores = async (query: PaginationQuery): Promise<PaginatedRes
   }
 
   const [items, total] = await Promise.all([
-    Store.find(filter).skip(skip).limit(limit).sort({ created_date: -1 }),
+    Store.find(filter).skip(skip).limit(limit).sort({ created_date_ts: -1, created_date: -1 }),
     Store.countDocuments(filter),
   ]);
 
@@ -75,6 +75,7 @@ export const createStore = async (body: CreateStoreBody): Promise<IStore> => {
     no_hp: noHp,
     alamat,
     created_date: formatGmt7(),
+    created_date_ts: new Date(),
     edited_by: '-',
     edited_date: '-',
   });

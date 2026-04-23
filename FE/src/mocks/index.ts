@@ -13,6 +13,5 @@ export async function startMocks() {
     onUnhandledRequest: "bypass",
     serviceWorker: { url: "/mockServiceWorker.js" },
   });
-  // eslint-disable-next-line no-console
   console.info("[mocks] MSW enabled — requests to /api/v1 are mocked.");
 }

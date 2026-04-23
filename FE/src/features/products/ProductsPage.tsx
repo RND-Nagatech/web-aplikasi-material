@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { TableSkeleton } from "@/components/common/TableSkeleton";
+import { TableFetchProgress } from "@/components/common/TableFetchProgress";
 import { TablePagination } from "@/components/common/TablePagination";
 import { ErrorState } from "@/components/common/States";
 import { formatCurrency, formatNumber } from "@/lib/format";
@@ -24,7 +25,7 @@ import emptyDataIcon from "../../../assets/empty.svg";
 const DEFAULT_PAGE_SIZE = 10;
 
 export default function ProductsPage() {
-  const { data, isLoading, isError, refetch } = useProducts();
+  const { data, isLoading, isFetching, isError, refetch } = useProducts();
   const createMut = useCreateProduct();
   const updateMut = useUpdateProduct();
   const deleteMut = useDeleteProduct();
@@ -83,6 +84,7 @@ export default function ProductsPage() {
           </Button>
         </div>
 
+        <TableFetchProgress loading={isFetching && !isLoading} />
         {/* Table Content with separated background and margin */}
         {isLoading ? (
           <div className="bg-muted/20 p-6"><TableSkeleton /></div>

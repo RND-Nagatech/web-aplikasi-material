@@ -1,16 +1,32 @@
+import { FilterQuery } from 'mongoose';
 import { Debt } from '../models/Debt';
 import { Payable } from '../models/Payable';
 import { Product } from '../models/Product';
 import { Customer } from '../models/Customer';
 import { SaleTransaction } from '../models/SaleTransaction';
 import { PurchaseTransaction } from '../models/PurchaseTransaction';
+import { formatDateOnlyGmt7, getGmt7DateRangeStrings } from '../utils/date';
+import { ensureCurrentCashDaily, getDailyCashByRange, getSaldoBeforeDate } from './cash-daily.service';
 
-const parseCreatedDateGmt7 = (value?: string, fallback?: Date): Date | null => {
-  if (!value) return null;
-  const normalized = value.replace(' GMT+7', '+07:00').replace(' ', 'T');
-  const parsed = new Date(normalized);
-  if (!Number.isNaN(parsed.getTime())) return parsed;
-  return fallback ?? null;
+const buildCreatedDateFilter = (
+  dateFrom?: Date,
+  dateTo?: Date
+): { created_date_ts?: Record<string, Date>; created_date?: Record<string, string> } | undefined => {
+  const { from, to } = getGmt7DateRangeStrings(dateFrom, dateTo);
+  if (!from && !to && !dateFrom && !dateTo) return undefined;
+
+  const rangeTs: Record<string, Date> = {};
+  if (dateFrom) rangeTs.$gte = dateFrom;
+  if (dateTo) rangeTs.$lte = dateTo;
+
+  const rangeString: Record<string, string> = {};
+  if (from) rangeString.$gte = from;
+  if (to) rangeString.$lte = to;
+
+  return {
+    created_date_ts: Object.keys(rangeTs).length ? rangeTs : undefined,
+    created_date: Object.keys(rangeString).length ? rangeString : undefined,
+  };
 };
 
 const attachCustomerName = async <T extends { kode_customer: string; nama_customer?: string }>(
@@ -32,13 +48,8 @@ const attachCustomerName = async <T extends { kode_customer: string; nama_custom
   }));
 };
 
-export const getStockReport = async (dateFrom?: Date, dateTo?: Date) => {
-  const allActive = await Product.find({ is_active: false }).sort({ nama_produk: 1 }).lean();
-
-  // Stock report should always reflect current active stock snapshot.
-  // Date filter is accepted for UI consistency, but not used to exclude products
-  // because stock is cumulative and should be visible on any selected date.
-  const items = allActive;
+export const getStockReport = async (_dateFrom?: Date, _dateTo?: Date) => {
+  const items = await Product.find({ is_active: true }).sort({ nama_produk: 1 }).lean();
 
   const summary = items.reduce(
     (acc, item) => {
@@ -59,16 +70,22 @@ export const getStockReport = async (dateFrom?: Date, dateTo?: Date) => {
   return { items, summary };
 };
 
-export const getDebtReport = async (dateFrom?: Date, dateTo?: Date) => {
-  const allItems = await Debt.find().sort({ created_date: -1 }).lean();
-  const filteredItems = allItems.filter((item) => {
-    const createdAt = parseCreatedDateGmt7(item.created_date);
-    if (!createdAt) return !dateFrom && !dateTo;
-    if (dateFrom && createdAt < dateFrom) return false;
-    if (dateTo && createdAt > dateTo) return false;
-    return true;
-  });
-  const items = await attachCustomerName(filteredItems);
+export const getDebtReport = async (dateFrom?: Date, dateTo?: Date, noFaktur?: string) => {
+  const where: FilterQuery<unknown> = {};
+  const createdDateRange = buildCreatedDateFilter(dateFrom, dateTo);
+  if (createdDateRange) {
+    where.$or = [
+      ...(createdDateRange.created_date_ts ? [{ created_date_ts: createdDateRange.created_date_ts }] : []),
+      ...(createdDateRange.created_date ? [{ created_date: createdDateRange.created_date }] : []),
+    ];
+  }
+  if (noFaktur?.trim()) {
+    const escaped = noFaktur.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    where.no_faktur_jual = { $regex: `^${escaped}`, $options: 'i' };
+  }
+
+  const rawItems = await Debt.find(where).sort({ created_date_ts: -1, created_date: -1 }).lean();
+  const items = await attachCustomerName(rawItems);
 
   const summary = items.reduce(
     (acc, item) => {
@@ -89,16 +106,22 @@ export const getDebtReport = async (dateFrom?: Date, dateTo?: Date) => {
   return { items, summary };
 };
 
-export const getPayableReport = async (dateFrom?: Date, dateTo?: Date) => {
-  const allItems = await Payable.find().sort({ created_date: -1 }).lean();
-  const filteredItems = allItems.filter((item) => {
-    const createdAt = parseCreatedDateGmt7(item.created_date);
-    if (!createdAt) return !dateFrom && !dateTo;
-    if (dateFrom && createdAt < dateFrom) return false;
-    if (dateTo && createdAt > dateTo) return false;
-    return true;
-  });
-  const items = await attachCustomerName(filteredItems);
+export const getPayableReport = async (dateFrom?: Date, dateTo?: Date, noFaktur?: string) => {
+  const where: FilterQuery<unknown> = {};
+  const createdDateRange = buildCreatedDateFilter(dateFrom, dateTo);
+  if (createdDateRange) {
+    where.$or = [
+      ...(createdDateRange.created_date_ts ? [{ created_date_ts: createdDateRange.created_date_ts }] : []),
+      ...(createdDateRange.created_date ? [{ created_date: createdDateRange.created_date }] : []),
+    ];
+  }
+  if (noFaktur?.trim()) {
+    const escaped = noFaktur.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    where.no_faktur_beli = { $regex: `^${escaped}`, $options: 'i' };
+  }
+
+  const rawItems = await Payable.find(where).sort({ created_date_ts: -1, created_date: -1 }).lean();
+  const items = await attachCustomerName(rawItems);
 
   const summary = items.reduce(
     (acc, item) => {
@@ -122,12 +145,13 @@ export const getPayableReport = async (dateFrom?: Date, dateTo?: Date) => {
 type FinanceReportType = 'rekap' | 'detail';
 
 type FinanceBaseItem = {
-  kategori: 'Penjualan' | 'Pembelian';
+  kategori: 'Penjualan' | 'Pembelian' | 'KEMBALIAN';
   deskripsi: string;
   uang_masuk: number;
   uang_keluar: number;
   nominal: number;
   created_date: string;
+  created_date_ts?: Date;
 };
 
 const formatNominalId = (value: number): string => new Intl.NumberFormat('id-ID').format(value);
@@ -138,59 +162,15 @@ export const getFinanceReport = async (
   dateTo?: Date,
   search?: string
 ) => {
-  const [sales, purchases] = await Promise.all([
-    SaleTransaction.find().sort({ created_date: 1 }).lean(),
-    PurchaseTransaction.find().sort({ created_date: 1 }).lean(),
-  ]);
+  await ensureCurrentCashDaily();
 
-  const allItems: FinanceBaseItem[] = [
-    ...sales.map((item) => ({
-      kategori: 'Penjualan' as const,
-      deskripsi: `${item.no_faktur_jual} (Rp ${formatNominalId(item.total)})`,
-      uang_masuk: item.total,
-      uang_keluar: 0,
-      nominal: item.total,
-      created_date: item.created_date,
-    })),
-    ...purchases.map((item) => ({
-      kategori: 'Pembelian' as const,
-      deskripsi: `${item.no_faktur_beli} (Rp ${formatNominalId(item.total)})`,
-      uang_masuk: 0,
-      uang_keluar: item.total,
-      nominal: item.total,
-      created_date: item.created_date,
-    })),
-  ].sort((a, b) => {
-    const aTime = parseCreatedDateGmt7(a.created_date)?.getTime() ?? 0;
-    const bTime = parseCreatedDateGmt7(b.created_date)?.getTime() ?? 0;
-    return aTime - bTime;
-  });
+  const fromDateOnly = dateFrom ? formatDateOnlyGmt7(dateFrom) : undefined;
+  const toDateOnly = dateTo ? formatDateOnlyGmt7(dateTo) : undefined;
+  const dailyRows = await getDailyCashByRange(fromDateOnly, toDateOnly);
 
-  const saldoAwal = allItems
-    .filter((item) => {
-      const createdAt = parseCreatedDateGmt7(item.created_date);
-      if (!createdAt || !dateFrom) return false;
-      return createdAt < dateFrom;
-    })
-    .reduce((acc, item) => acc + item.uang_masuk - item.uang_keluar, 0);
-
-  let ranged = allItems.filter((item) => {
-    const createdAt = parseCreatedDateGmt7(item.created_date);
-    if (!createdAt) return !dateFrom && !dateTo;
-    if (dateFrom && createdAt < dateFrom) return false;
-    if (dateTo && createdAt > dateTo) return false;
-    return true;
-  });
-
-  if (search?.trim()) {
-    const q = search.trim().toLowerCase();
-    ranged = ranged.filter((item) =>
-      item.kategori.toLowerCase().includes(q) || item.deskripsi.toLowerCase().includes(q)
-    );
-  }
-
-  const totalUangMasuk = ranged.reduce((acc, item) => acc + item.uang_masuk, 0);
-  const totalUangKeluar = ranged.reduce((acc, item) => acc + item.uang_keluar, 0);
+  const saldoAwal = fromDateOnly ? await getSaldoBeforeDate(fromDateOnly) : 0;
+  const totalUangMasuk = dailyRows.reduce((acc, row) => acc + (row.uang_masuk ?? 0), 0);
+  const totalUangKeluar = dailyRows.reduce((acc, row) => acc + (row.uang_keluar ?? 0), 0);
   const saldoAkhir = saldoAwal + totalUangMasuk - totalUangKeluar;
 
   const summary = {
@@ -200,29 +180,101 @@ export const getFinanceReport = async (
     saldo_akhir: saldoAkhir,
   };
 
+  const rangedFilter = buildCreatedDateFilter(dateFrom, dateTo);
+  const whereSale: FilterQuery<unknown> = rangedFilter
+    ? {
+        $or: [
+          ...(rangedFilter.created_date_ts ? [{ created_date_ts: rangedFilter.created_date_ts }] : []),
+          ...(rangedFilter.created_date ? [{ created_date: rangedFilter.created_date }] : []),
+        ],
+      }
+    : {};
+  const wherePurchase: FilterQuery<unknown> = rangedFilter
+    ? {
+        $or: [
+          ...(rangedFilter.created_date_ts ? [{ created_date_ts: rangedFilter.created_date_ts }] : []),
+          ...(rangedFilter.created_date ? [{ created_date: rangedFilter.created_date }] : []),
+        ],
+      }
+    : {};
+
+  const [salesInRange, purchasesInRange] = await Promise.all([
+    SaleTransaction.find(whereSale).sort({ created_date_ts: 1, created_date: 1 }).lean(),
+    PurchaseTransaction.find(wherePurchase).sort({ created_date_ts: 1, created_date: 1 }).lean(),
+  ]);
+
+  let ranged: FinanceBaseItem[] = [
+    ...salesInRange.map((item) => ({
+      kategori: 'Penjualan' as const,
+      deskripsi: `${item.no_faktur_jual} (Rp ${formatNominalId(item.total)})`,
+      uang_masuk: item.total,
+      uang_keluar: 0,
+      nominal: item.total,
+      created_date: item.created_date,
+      created_date_ts: item.created_date_ts,
+    })),
+    ...salesInRange
+      .filter((item) => (item.kembalian ?? 0) > 0)
+      .map((item) => ({
+        kategori: 'KEMBALIAN' as const,
+        deskripsi: `${item.no_faktur_jual} (Rp ${formatNominalId(item.kembalian ?? 0)})`,
+        uang_masuk: 0,
+        uang_keluar: item.kembalian ?? 0,
+        nominal: item.kembalian ?? 0,
+        created_date: item.created_date,
+        created_date_ts: item.created_date_ts,
+      })),
+    ...purchasesInRange.map((item) => ({
+      kategori: 'Pembelian' as const,
+      deskripsi: `${item.no_faktur_beli} (Rp ${formatNominalId(item.total)})`,
+      uang_masuk: 0,
+      uang_keluar: item.total,
+      nominal: item.total,
+      created_date: item.created_date,
+      created_date_ts: item.created_date_ts,
+    })),
+    ...purchasesInRange
+      .filter((item) => (item.kembalian ?? 0) > 0)
+      .map((item) => ({
+        kategori: 'KEMBALIAN' as const,
+        deskripsi: `${item.no_faktur_beli} (Rp ${formatNominalId(item.kembalian ?? 0)})`,
+        uang_masuk: 0,
+        uang_keluar: item.kembalian ?? 0,
+        nominal: item.kembalian ?? 0,
+        created_date: item.created_date,
+        created_date_ts: item.created_date_ts,
+      })),
+  ].sort((a, b) => {
+    const aTime = a.created_date_ts?.getTime() ?? 0;
+    const bTime = b.created_date_ts?.getTime() ?? 0;
+    return aTime - bTime || a.created_date.localeCompare(b.created_date);
+  });
+
+  if (search?.trim()) {
+    const q = search.trim().toLowerCase();
+    ranged = ranged.filter((item) =>
+      item.kategori.toLowerCase().includes(q) || item.deskripsi.toLowerCase().includes(q)
+    );
+  }
+
   if (type === 'rekap') {
-    const penjualanMasuk = ranged
-      .filter((item) => item.kategori === 'Penjualan')
-      .reduce((acc, item) => acc + item.uang_masuk, 0);
-    const pembelianKeluar = ranged
-      .filter((item) => item.kategori === 'Pembelian')
-      .reduce((acc, item) => acc + item.uang_keluar, 0);
+    const rekap = ranged.reduce(
+      (acc, item) => {
+        const key = item.kategori;
+        if (!acc[key]) {
+          acc[key] = { masuk: 0, keluar: 0 };
+        }
+        acc[key].masuk += item.uang_masuk;
+        acc[key].keluar += item.uang_keluar;
+        return acc;
+      },
+      {} as Record<string, { masuk: number; keluar: number }>
+    );
 
     const items = [
-      {
-        kategori: 'Penjualan',
-        deskripsi: '-',
-        uang_masuk: penjualanMasuk,
-        uang_keluar: 0,
-        created_date: '-',
-      },
-      {
-        kategori: 'Pembelian',
-        deskripsi: '-',
-        uang_masuk: 0,
-        uang_keluar: pembelianKeluar,
-        created_date: '-',
-      },
+      { kategori: 'Penjualan', deskripsi: '-', uang_masuk: rekap.Penjualan?.masuk ?? 0, uang_keluar: 0, created_date: '-' },
+      { kategori: 'Pembelian', deskripsi: '-', uang_masuk: 0, uang_keluar: rekap.Pembelian?.keluar ?? 0, created_date: '-' },
+      { kategori: 'KEMBALIAN', deskripsi: '-', uang_masuk: 0, uang_keluar: rekap.KEMBALIAN?.keluar ?? 0, created_date: '-' },
     ];
 
     return { type, items, summary };

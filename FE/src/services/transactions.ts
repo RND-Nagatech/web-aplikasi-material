@@ -95,9 +95,9 @@ export const transactionsService = {
       .post<ApiEnvelope<ApiTransaction>>("/transactions", {
         type: mapTypeToApi(input.type),
         customer: input.customerId || undefined,
-        nama_customer: input.customerName,
-        no_hp: input.customerPhone,
-        alamat: input.customerAddress,
+        nama_customer: input.customerName?.trim().toUpperCase(),
+        no_hp: input.customerPhone?.trim(),
+        alamat: input.customerAddress?.trim().toUpperCase(),
         items: input.items.map((it) => ({
           product: it.productId,
           qty: it.quantity,

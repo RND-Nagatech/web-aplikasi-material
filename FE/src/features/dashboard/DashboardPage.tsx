@@ -195,7 +195,7 @@ export default function DashboardPage() {
                                 <TableCell className="text-xs">{item.noFaktur}</TableCell>
                                 <TableCell className="text-xs">{toDateOnly(item.tanggalTransaksi)}</TableCell>
                                 <TableCell className="text-xs">{toDateOnly(item.tanggalJatuhTempo)}</TableCell>
-                                <TableCell className="text-xs">{item.namaCustomer}</TableCell>
+                                <TableCell className="text-xs">{(item.namaCustomer ?? "").toUpperCase()}</TableCell>
                                 <TableCell className="text-right text-xs">{formatCurrency(item.sisa)}</TableCell>
                               </TableRow>
                             ))
@@ -242,7 +242,7 @@ export default function DashboardPage() {
                                 <TableCell className="text-xs">{item.noFaktur}</TableCell>
                                 <TableCell className="text-xs">{toDateOnly(item.tanggalTransaksi)}</TableCell>
                                 <TableCell className="text-xs">{toDateOnly(item.tanggalJatuhTempo)}</TableCell>
-                                <TableCell className="text-xs">{item.namaCustomer}</TableCell>
+                                <TableCell className="text-xs">{(item.namaCustomer ?? "").toUpperCase()}</TableCell>
                                 <TableCell className="text-right text-xs">{formatCurrency(item.sisa)}</TableCell>
                               </TableRow>
                             ))

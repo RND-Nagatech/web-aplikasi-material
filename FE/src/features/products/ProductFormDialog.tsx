@@ -59,7 +59,11 @@ export function ProductFormDialog({ open, onOpenChange, initial, onSubmit, submi
         >
           <div className="space-y-2">
             <Label htmlFor="name">Nama</Label>
-            <Input id="name" {...form.register("name")} />
+            <Input
+              id="name"
+              value={form.watch("name") ?? ""}
+              onChange={(e) => form.setValue("name", e.target.value.toUpperCase(), { shouldDirty: true, shouldValidate: true })}
+            />
             {form.formState.errors.name && <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>}
           </div>
           <div className="grid grid-cols-3 gap-3">

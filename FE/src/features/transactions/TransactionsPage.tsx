@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { useQuery } from "@tanstack/react-query";
-import jsPDF from "jspdf";
 import { Plus, Trash2, Search, MoreVertical } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -29,6 +27,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Badge } from "@/components/ui/badge";
 // PageHeader not used; layout follows the styling guide inside a unified Card
 import { TableSkeleton } from "@/components/common/TableSkeleton";
+import { TableFetchProgress } from "@/components/common/TableFetchProgress";
 import { TablePagination } from "@/components/common/TablePagination";
 import { ErrorState } from "@/components/common/States";
 import emptyDataIcon from "../../../assets/empty.svg";
@@ -36,289 +35,27 @@ import { CurrencyInput } from "@/components/common/CurrencyInput";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useProducts } from "@/features/products/hooks";
 import { useCreateTransaction, useTransactions } from "./hooks";
-import type { Store, Transaction, TransactionInput } from "@/types";
+import type { Transaction, TransactionInput } from "@/types";
 import { customersService } from "@/services/customers";
 import { storesService } from "@/services/stores";
 import ngtcLogo from "../../../assets/NGTC.png";
 import lunasIcon from "../../../assets/lunas_icon.png";
 import belumLunasIcon from "../../../assets/belum_lunas_icon.png";
 import reprintIcon from "../../../assets/reprint_icon.png";
+import { DEFAULT_PAGE_SIZE, transactionSchema, typeLabel, type TransactionFormOutput, type TransactionFormValues } from "./transaction-form";
+import type { NotaItem } from "./nota-pdf";
 
-const schema = z.object({
-  type: z.enum(["sale", "purchase"]).optional(),
-  customerId: z.string().optional(),
-  customerName: z.string().trim().min(1, "Nama customer wajib diisi"),
-  customerPhone: z.string().optional(),
-  customerAddress: z.string().optional(),
-  paid: z.coerce.number().min(0, "Harus ≥ 0"),
-  items: z.array(
-    z.object({
-      productId: z.string().min(1, "Pilih produk"),
-      quantity: z.coerce.number().int("Quantity harus bilangan bulat").min(1, "Maaf data quantity harus diisi"),
-      priceType: z.enum(["wholesale", "retail"]),
-      unitPrice: z.coerce.number().min(0),
-    }),
-  ).min(1, "Tambahkan minimal satu item"),
-});
-type FormValues = z.input<typeof schema>;
-type FormOutput = z.output<typeof schema>;
-
-const typeLabel = (t: "sale" | "purchase") => (t === "sale" ? "Penjualan" : "Pembelian");
-const DEFAULT_PAGE_SIZE = 10;
-
-interface NotaItem {
-  productName: string;
-  qty: number;
-  unitPrice: number;
-  subtotal: number;
-}
-
-const loadImageAsDataUrl = (src: string): Promise<string | null> =>
-  new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      try {
-        const canvas = document.createElement("canvas");
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          resolve(null);
-          return;
-        }
-        ctx.drawImage(img, 0, 0);
-        resolve(canvas.toDataURL("image/png"));
-      } catch {
-        resolve(null);
-      }
-    };
-    img.onerror = () => resolve(null);
-    img.src = src;
-  });
-
-const chunkItems = <T,>(list: T[], size: number): T[][] => {
-  if (size <= 0) return [list];
-  const chunks: T[][] = [];
-  for (let i = 0; i < list.length; i += size) {
-    chunks.push(list.slice(i, i + size));
+type NotaPdfModule = typeof import("./nota-pdf");
+let notaPdfModulePromise: Promise<NotaPdfModule> | null = null;
+const getNotaPdfModule = (): Promise<NotaPdfModule> => {
+  if (!notaPdfModulePromise) {
+    notaPdfModulePromise = import("./nota-pdf");
   }
-  return chunks.length ? chunks : [[]];
-};
-
-const drawNotaSection = (
-  doc: jsPDF,
-  options: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    store?: Store;
-    logoDataUrl: string | null;
-    statusIconDataUrl: string | null;
-    customerName: string;
-    customerPhone: string;
-    customerAddress: string;
-    invoiceNumber: string;
-    transactionDate: string;
-    items: NotaItem[];
-    total: number;
-  },
-) => {
-  const {
-    x, y, width, height, store, logoDataUrl, statusIconDataUrl, customerName, customerPhone, customerAddress,
-    invoiceNumber, transactionDate, items, total,
-  } = options;
-
-  const pad = 10;
-  const contentX = x + pad;
-  const contentY = y + pad;
-  const contentW = width - pad * 2;
-  const sectionBottom = y + height;
-  const rightX = x + width - pad;
-
-  doc.setDrawColor(80, 80, 80);
-  doc.setLineWidth(0.6);
-  doc.rect(x, y, width, height);
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.text((store?.nama_toko ?? "-").toUpperCase(), contentX, contentY + 4);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.text(`Alamat: ${(store?.alamat ?? "-").toUpperCase()}`, contentX, contentY + 14);
-  doc.text(`No HP : ${store?.no_hp ?? "-"}`, contentX, contentY + 22);
-  doc.text(`No Nota: ${invoiceNumber || "-"}`, contentX, contentY + 30);
-  doc.text(`Tanggal: ${transactionDate}`, contentX, contentY + 38);
-
-  if (logoDataUrl) {
-    try {
-      const imageProps = doc.getImageProperties(logoDataUrl);
-      const targetWidth = 44;
-      const targetHeight = targetWidth * (imageProps.height / imageProps.width);
-      doc.addImage(logoDataUrl, "PNG", rightX - targetWidth, contentY, targetWidth, targetHeight);
-    } catch {
-      // ignore logo failures to keep nota generation robust
-    }
-  }
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.5);
-  doc.text("Customer", rightX - 160, contentY + 6);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.text(`Nama  : ${customerName || "-"}`, rightX - 160, contentY + 14);
-  doc.text(`No HP : ${customerPhone || "-"}`, rightX - 160, contentY + 22);
-  doc.text(`Alamat: ${customerAddress || "-"}`, rightX - 160, contentY + 30, { maxWidth: 155 });
-
-  const tableTop = contentY + 48;
-  const tableBottom = sectionBottom - 40;
-  const tableHeight = Math.max(56, tableBottom - tableTop);
-  const rowCount = 8;
-  const rowH = tableHeight / rowCount;
-  const colNo = 24;
-  const colProduct = 126;
-  const colPrice = 66;
-  const colQty = 40;
-  const colTotal = contentW - (colNo + colProduct + colPrice + colQty);
-
-  const colX = [
-    contentX,
-    contentX + colNo,
-    contentX + colNo + colProduct,
-    contentX + colNo + colProduct + colPrice,
-    contentX + colNo + colProduct + colPrice + colQty,
-    contentX + colNo + colProduct + colPrice + colQty + colTotal,
-  ];
-
-  doc.setLineWidth(0.5);
-  doc.rect(contentX, tableTop, contentW, tableHeight);
-  const grandRowTop = tableTop + (rowCount - 1) * rowH;
-  for (let i = 1; i < colX.length - 1; i += 1) {
-    if (i === 4) {
-      // Keep JUMLAH column separated on grand total row.
-      doc.line(colX[i], tableTop, colX[i], tableTop + tableHeight);
-      continue;
-    }
-    // Merge NO/JENIS/HARGA/QTY cells on grand total row.
-    doc.line(colX[i], tableTop, colX[i], grandRowTop);
-  }
-  for (let r = 1; r < rowCount; r += 1) {
-    const yLine = tableTop + r * rowH;
-    doc.line(contentX, yLine, contentX + contentW, yLine);
-  }
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
-  doc.text("NO", colX[0] + colNo / 2, tableTop + rowH / 2 + 3, { align: "center" });
-  doc.text("JENIS BARANG", colX[1] + 3, tableTop + rowH / 2 + 3);
-  doc.text("HARGA", colX[2] + colPrice / 2, tableTop + rowH / 2 + 3, { align: "center" });
-  doc.text("QTY", colX[3] + colQty / 2, tableTop + rowH / 2 + 3, { align: "center" });
-  doc.text("JUMLAH", colX[4] + colTotal / 2, tableTop + rowH / 2 + 3, { align: "center" });
-
-  const sixRows = [...items];
-  while (sixRows.length < 6) sixRows.push({ productName: "", qty: 0, unitPrice: 0, subtotal: 0 });
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  sixRows.forEach((item, idx) => {
-    const rowY = tableTop + (idx + 1) * rowH + rowH / 2 + 3;
-    doc.text(item.productName ? String(idx + 1) : "", colX[0] + colNo / 2, rowY, { align: "center" });
-    doc.text(item.productName || "", colX[1] + 3, rowY, { maxWidth: colProduct - 6 });
-    doc.text(item.productName ? formatCurrency(item.unitPrice) : "", colX[3] - 4, rowY, { align: "right" });
-    doc.text(item.productName ? String(item.qty) : "", colX[3] + colQty / 2, rowY, { align: "center" });
-    doc.text(item.productName ? formatCurrency(item.subtotal) : "", colX[5] - 4, rowY, { align: "right" });
-  });
-
-  if (statusIconDataUrl) {
-    try {
-      const wmProps = doc.getImageProperties(statusIconDataUrl);
-      const wmWidth = 112;
-      const wmHeight = wmWidth * (wmProps.height / wmProps.width);
-      const wmX = x + (width - wmWidth) / 2;
-      const wmY = y + (height - wmHeight) / 2;
-      const docAny = doc as any;
-      if (typeof docAny.setGState === "function" && typeof docAny.GState === "function") {
-        docAny.setGState(new docAny.GState({ opacity: 0.22 }));
-      }
-      doc.addImage(statusIconDataUrl, "PNG", wmX, wmY, wmWidth, wmHeight);
-      if (typeof docAny.setGState === "function" && typeof docAny.GState === "function") {
-        docAny.setGState(new docAny.GState({ opacity: 1 }));
-      }
-    } catch {
-      // ignore watermark failures to keep nota generation robust
-    }
-  }
-
-  const grandY = tableTop + (rowCount - 1) * rowH + rowH / 2 + 3;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
-  const grandLabelCenterX = (colX[0] + colX[4]) / 2;
-  doc.text("GRAND TOTAL", grandLabelCenterX, grandY, { align: "center" });
-  doc.text(formatCurrency(total), colX[5] - 4, grandY, { align: "right" });
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
-  doc.rect(contentX, sectionBottom - 26, 120, 18);
-  doc.text("Barang yang sudah dibeli", contentX + 60, sectionBottom - 18, { align: "center" });
-  doc.text("tidak dapat ditukar/diuangkan", contentX + 60, sectionBottom - 11, { align: "center" });
-
-  const signatureCenterX = rightX - 90;
-  doc.setFontSize(10);
-  doc.text("Hormat Kami,", signatureCenterX, sectionBottom - 32, { align: "center" });
-  doc.text("(.....................................)", signatureCenterX, sectionBottom - 4, { align: "center" });
-};
-
-const downloadNotaPdf = async (params: {
-  store?: Store;
-  logoDataUrl: string | null;
-  statusIconDataUrl: string | null;
-  transaction: Transaction;
-  items: NotaItem[];
-}) => {
-  const { store, logoDataUrl, statusIconDataUrl, transaction, items } = params;
-  const chunks = chunkItems(items, 6);
-  const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
-  const pageW = doc.internal.pageSize.getWidth();
-  const pageH = doc.internal.pageSize.getHeight();
-  const margin = 12;
-  const sectionsPerPage = 3;
-  const sectionH = (pageH - margin * 2) / 3;
-  const customerPhone = transaction.customerPhone?.trim() || "-";
-  const customerAddress = transaction.customerAddress?.trim() || "-";
-  const customerName = transaction.customerName?.trim() || "-";
-  const transactionDate = formatDate(transaction.createdAt);
-  const invoiceNumber = transaction.invoiceNumber ?? "-";
-
-  chunks.forEach((chunk, idx) => {
-    if (idx > 0 && idx % sectionsPerPage === 0) {
-      doc.addPage();
-    }
-    const positionInPage = idx % sectionsPerPage;
-    const y = margin + positionInPage * sectionH;
-    drawNotaSection(doc, {
-      x: margin,
-      y,
-      width: pageW - margin * 2,
-      height: sectionH,
-      store,
-      logoDataUrl,
-      statusIconDataUrl,
-      customerName,
-      customerPhone,
-      customerAddress,
-      invoiceNumber,
-      transactionDate,
-      items: chunk,
-      total: transaction.total,
-    });
-  });
-
-  const fileName = `NOTA-${(transaction.invoiceNumber ?? "TRANSAKSI").replace(/\s+/g, "-")}.pdf`;
-  doc.save(fileName);
+  return notaPdfModulePromise;
 };
 
 export default function TransactionsPage() {
-  const { data: txs, isLoading, isError, refetch } = useTransactions();
+  const { data: txs, isLoading, isFetching, isError, refetch } = useTransactions();
   const { data: products = [] } = useProducts();
   const storesQ = useQuery({
     queryKey: ["stores", "nota-header"],
@@ -360,25 +97,17 @@ export default function TransactionsPage() {
 
   const handleReprintNota = async (transaction: Transaction) => {
     try {
+      const notaPdf = await getNotaPdfModule();
       const [logoDataUrl, lunasIconDataUrl, belumLunasIconDataUrl] = await Promise.all([
-        loadImageAsDataUrl(ngtcLogo),
-        loadImageAsDataUrl(lunasIcon),
-        loadImageAsDataUrl(belumLunasIcon),
+        notaPdf.loadImageAsDataUrl(ngtcLogo),
+        notaPdf.loadImageAsDataUrl(lunasIcon),
+        notaPdf.loadImageAsDataUrl(belumLunasIcon),
       ]);
-      const mappedItems: NotaItem[] = transaction.items.map((it, idx) => ({
-        productName:
-          it.productName
-          ?? products.find((p) => p.id === it.productId || p.kodeProduk === it.productId)?.name
-          ?? it.productId
-          ?? `Item ${idx + 1}`,
-        qty: Number(it.quantity) || 0,
-        unitPrice: Number(it.unitPrice) || 0,
-        subtotal: Number(it.subtotal) || ((Number(it.quantity) || 0) * (Number(it.unitPrice) || 0)),
-      }));
+      const mappedItems: NotaItem[] = notaPdf.mapNotaItemsFromTransaction(transaction, products);
       const statusIconDataUrl = (Number(transaction.paid) || 0) >= (Number(transaction.total) || 0)
         ? lunasIconDataUrl
         : belumLunasIconDataUrl;
-      await downloadNotaPdf({
+      await notaPdf.downloadNotaPdf({
         store: storesQ.data?.[0],
         logoDataUrl,
         statusIconDataUrl,
@@ -412,6 +141,7 @@ export default function TransactionsPage() {
           </Button>
         </div>
 
+        <TableFetchProgress loading={isFetching && !isLoading} />
         {isLoading ? (
           <div className="bg-muted/20 p-6"><TableSkeleton /></div>
         ) : isError ? (
@@ -432,8 +162,9 @@ export default function TransactionsPage() {
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
                     <TableHead className="font-semibold text-foreground">Tanggal</TableHead>
                     <TableHead className="font-semibold text-foreground">No Faktur</TableHead>
+                    <TableHead className="font-semibold text-foreground">Kode</TableHead>
+                    <TableHead className="font-semibold text-foreground">Nama</TableHead>
                     <TableHead className="font-semibold text-foreground">Tipe</TableHead>
-                    <TableHead className="font-semibold text-foreground">Pelanggan</TableHead>
                     <TableHead className="text-right font-semibold tabular-nums">Item</TableHead>
                     <TableHead className="text-right font-semibold text-foreground">Total</TableHead>
                     <TableHead className="text-right font-semibold text-foreground">Dibayar</TableHead>
@@ -446,10 +177,11 @@ export default function TransactionsPage() {
                     <TableRow key={t.id}>
                       <TableCell className="text-muted-foreground">{formatDate(t.createdAt)}</TableCell>
                       <TableCell className="font-medium">{t.invoiceNumber ?? "-"}</TableCell>
+                      <TableCell className="font-medium">{t.customerId ?? "-"}</TableCell>
+                      <TableCell>{t.customerName ?? "—"}</TableCell>
                       <TableCell>
                         <Badge variant={t.type === "sale" ? "default" : "secondary"}>{typeLabel(t.type)}</Badge>
                       </TableCell>
-                      <TableCell>{t.customerName ?? "—"}</TableCell>
                       <TableCell className="text-right tabular-nums">{t.items.length}</TableCell>
                       <TableCell className="text-right tabular-nums">{formatCurrency(t.total)}</TableCell>
                       <TableCell className="text-right tabular-nums">{formatCurrency(t.paid)}</TableCell>
@@ -510,25 +242,17 @@ export default function TransactionsPage() {
         onSubmit={async (input) => {
           try {
             const created = await createMut.mutateAsync(input);
+            const notaPdf = await getNotaPdfModule();
             const [logoDataUrl, lunasIconDataUrl, belumLunasIconDataUrl] = await Promise.all([
-              loadImageAsDataUrl(ngtcLogo),
-              loadImageAsDataUrl(lunasIcon),
-              loadImageAsDataUrl(belumLunasIcon),
+              notaPdf.loadImageAsDataUrl(ngtcLogo),
+              notaPdf.loadImageAsDataUrl(lunasIcon),
+              notaPdf.loadImageAsDataUrl(belumLunasIcon),
             ]);
-            const mappedItems: NotaItem[] = input.items.map((it) => {
-              const productName = products.find((p) => p.id === it.productId)?.name ?? "-";
-              const subtotal = (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0);
-              return {
-                productName,
-                qty: Number(it.quantity) || 0,
-                unitPrice: Number(it.unitPrice) || 0,
-                subtotal,
-              };
-            });
+            const mappedItems: NotaItem[] = notaPdf.mapNotaItemsFromTransaction(created, products);
             const statusIconDataUrl = (Number(created.paid) || 0) >= (Number(created.total) || 0)
               ? lunasIconDataUrl
               : belumLunasIconDataUrl;
-            await downloadNotaPdf({
+            await notaPdf.downloadNotaPdf({
               store: storesQ.data?.[0],
               logoDataUrl,
               statusIconDataUrl,
@@ -590,8 +314,8 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
     unitPrice: 0,
   });
 
-  const form = useForm<FormValues, unknown, FormOutput>({
-    resolver: zodResolver(schema),
+  const form = useForm<TransactionFormValues, unknown, TransactionFormOutput>({
+    resolver: zodResolver(transactionSchema),
     defaultValues: {
       type: "sale",
       customerId: undefined,
@@ -909,7 +633,7 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
                   placeholder="Masukkan nama customer"
                   value={form.watch("customerName")}
                   onChange={(e) => {
-                    form.setValue("customerName", e.target.value, { shouldValidate: true });
+                    form.setValue("customerName", e.target.value.toUpperCase(), { shouldValidate: true });
                     form.setValue("customerId", undefined, { shouldValidate: false });
                   }}
                 />
@@ -931,7 +655,7 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
                   placeholder="Masukkan alamat customer"
                   value={form.watch("customerAddress") ?? ""}
                   onChange={(e) => {
-                    form.setValue("customerAddress", e.target.value, { shouldValidate: false });
+                    form.setValue("customerAddress", e.target.value.toUpperCase(), { shouldValidate: false });
                     form.setValue("customerId", undefined, { shouldValidate: false });
                   }}
                 />
@@ -1155,7 +879,7 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
                 <Input
                   placeholder="Masukkan nama customer"
                   value={filterName}
-                  onChange={(e) => setFilterName(e.target.value)}
+                  onChange={(e) => setFilterName(e.target.value.toUpperCase())}
                   className="w-full max-w-sm"
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
@@ -1184,7 +908,7 @@ function TransactionDialog({ open, onOpenChange, onSubmit, submitting }: DialogP
                 <Input
                   placeholder="Masukkan alamat customer"
                   value={filterAddress}
-                  onChange={(e) => setFilterAddress(e.target.value)}
+                  onChange={(e) => setFilterAddress(e.target.value.toUpperCase())}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();

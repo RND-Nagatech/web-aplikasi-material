@@ -112,6 +112,7 @@ const mapDebtItem = (item: ApiDebtItem): Debt => ({
     ?? (typeof item.customer === "string"
       ? undefined
       : item.customer?.nama_customer ?? item.customer?.name),
+  customerCode: item.kode_customer ?? "-",
   transactionId:
     item.no_faktur_jual
     ?? (typeof item.transaction === "string"
@@ -134,6 +135,7 @@ const mapPayableItem = (item: ApiPayableItem): Payable => ({
     ?? (typeof item.customer === "string"
       ? undefined
       : item.customer?.nama_customer ?? item.customer?.name),
+  customerCode: item.kode_customer ?? "-",
   transactionId:
     item.no_faktur_beli
     ?? (typeof item.transaction === "string"

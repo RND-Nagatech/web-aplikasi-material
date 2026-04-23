@@ -11,30 +11,34 @@ import customerIcon from "../../../assets/customer_icon.png";
 import dashboardIcon from "../../../assets/dashboard_icon.png";
 import storeIcon from "../../../assets/store_icon.png";
 
-const PiutangIcon = (props: any) => (
+type SidebarIconProps = {
+  className?: string;
+};
+
+const PiutangIcon = (props: SidebarIconProps) => (
   <img src={piutangIcon} alt="Piutang" className={`${props.className ?? ''} object-contain`} />
 );
 
-const HutangIcon = (props: any) => (
+const HutangIcon = (props: SidebarIconProps) => (
   <img src={hutangIcon} alt="Hutang" className={`${props.className ?? ''} object-contain`} />
 );
-const TransaksiIcon = (props: any) => (
+const TransaksiIcon = (props: SidebarIconProps) => (
   <img src={transaksiIcon} alt="Transaksi" className={`${props.className ?? ''} object-contain`} />
 );
 
-const ProductIcon = (props: any) => (
+const ProductIcon = (props: SidebarIconProps) => (
   <img src={productIcon} alt="Produk" className={`${props.className ?? ''} object-contain`} />
 );
 
-const CustomerIcon = (props: any) => (
+const CustomerIcon = (props: SidebarIconProps) => (
   <img src={customerIcon} alt="Pelanggan" className={`${props.className ?? ''} object-contain`} />
 );
 
-const DashboardIcon = (props: any) => (
+const DashboardIcon = (props: SidebarIconProps) => (
   <img src={dashboardIcon} alt="Dasbor" className={`${props.className ?? ''} object-contain`} />
 );
 
-const StoreIcon = (props: any) => (
+const StoreIcon = (props: SidebarIconProps) => (
   <img src={storeIcon} alt="Master Toko" className={`${props.className ?? ''} object-contain`} />
 );
 

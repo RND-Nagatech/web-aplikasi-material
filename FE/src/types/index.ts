@@ -80,6 +80,7 @@ export interface TransactionInput {
 export interface Debt {
   id: string;
   customerId: string;
+  customerCode?: string;
   customerName?: string;
   transactionId: string;
   total: number;
@@ -96,6 +97,7 @@ export interface DebtPaymentInput {
 export interface Payable {
   id: string;
   customerId: string;
+  customerCode?: string;
   customerName?: string;
   transactionId: string;
   total: number;

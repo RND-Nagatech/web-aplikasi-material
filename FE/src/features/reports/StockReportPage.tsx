@@ -8,15 +8,15 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { TableSkeleton } from "@/components/common/TableSkeleton";
+import { TableFetchProgress } from "@/components/common/TableFetchProgress";
 import { TablePagination } from "@/components/common/TablePagination";
 import { ErrorState } from "@/components/common/States";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { reportsService } from "@/services/reports";
 import { storesService } from "@/services/stores";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import type { RowInput } from "jspdf-autotable";
-import ExcelJS from "exceljs";
+import { getPdfEngine } from "./export-engine/lazy";
+import { exportExcelWithWorker } from "./export-engine/excel-worker.client";
 import searchDataIcon from "../../../assets/cari data.svg";
 import emptyDataIcon from "../../../assets/empty.svg";
 
@@ -42,11 +42,11 @@ export default function StockReportPage() {
     queryFn: storesService.list,
   });
 
-  const items = stockQ.data?.items ?? [];
   const filtered = useMemo(() => {
+    const items = stockQ.data?.items ?? [];
     const q = search.trim().toLowerCase();
     return q ? items.filter((it) => (it.name ?? "").toLowerCase().includes(q)) : items;
-  }, [items, search]);
+  }, [stockQ.data?.items, search]);
 
   const totalItems = filtered.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
@@ -98,28 +98,19 @@ export default function StockReportPage() {
     && !stockQ.isError
     && filtered.length > 0;
 
-  const exportPdf = () => {
+  const exportPdf = async () => {
+    const pdf = await getPdfEngine();
     const store = storesQ.data?.[0];
     const reportDateFrom = submittedFilter?.dateFrom ?? dateFrom;
     const reportDateTo = submittedFilter?.dateTo ?? dateTo;
 
-    const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
-    const pageWidth = doc.internal.pageSize.getWidth();
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(18);
-    doc.text((store?.nama_toko ?? "-").toUpperCase(), 40, 50);
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(11);
-    doc.text(`Alamat : ${(store?.alamat ?? "-").toUpperCase()}`, 40, 70);
-    doc.text(`No HP  : ${store?.no_hp ?? "-"}`, 40, 86);
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(18);
-    doc.text("LAPORAN STOCK", pageWidth - 40, 50, { align: "right" });
-    doc.setFontSize(13);
-    doc.text(`TANGGAL : ${reportDateFrom} s/d ${reportDateTo}`, pageWidth - 40, 72, { align: "right" });
+    const doc = pdf.createLandscapePdf();
+    pdf.drawStandardReportHeader(doc, {
+      store,
+      title: "LAPORAN STOCK",
+      dateFrom: reportDateFrom,
+      dateTo: reportDateTo,
+    });
 
     const totalStok = filtered.reduce((sum, item) => sum + item.stock, 0);
     const totalHargaGrosir = filtered.reduce((sum, item) => sum + item.wholesalePrice, 0);
@@ -143,187 +134,42 @@ export default function StockReportPage() {
       { content: formatCurrency(totalNilaiStokGrosir), styles: { halign: "right", fontStyle: "bold" } },
     ]);
 
-    autoTable(doc, {
-      startY: 110,
+    pdf.renderReportTablePdf(doc, {
       head: [["No", "Produk", "Stok", "Harga Grosir", "Harga Eceran", "Nilai Stok (Grosir)"]],
       body: tableBody,
-      theme: "grid",
-      styles: {
-        font: "helvetica",
-        fontSize: 10,
-        cellPadding: 6,
-        lineColor: [180, 180, 180],
-        lineWidth: 0.4,
-      },
-      headStyles: {
-        fillColor: [230, 230, 230],
-        textColor: [20, 20, 20],
-        fontStyle: "bold",
-      },
-      columnStyles: {
-        0: { halign: "center", cellWidth: 56 },
-        2: { halign: "right", cellWidth: 80 },
-        3: { halign: "right", cellWidth: 120 },
-        4: { halign: "right", cellWidth: 120 },
-        5: { halign: "right", cellWidth: 150 },
-      },
-      didParseCell: (data) => {
-        const isGrandTotalRow = data.section === "body" && data.row.index === tableBody.length - 1;
-        if (isGrandTotalRow) {
-          data.cell.styles.fillColor = [245, 245, 245];
-          data.cell.styles.fontStyle = "bold";
-        }
+      autoTableOptions: {
+        columnStyles: {
+          0: { halign: "center", cellWidth: 56 },
+          2: { halign: "right", cellWidth: 80 },
+          3: { halign: "right", cellWidth: 120 },
+          4: { halign: "right", cellWidth: 120 },
+          5: { halign: "right", cellWidth: 150 },
+        },
       },
     });
 
-    const printedDate = new Date().toLocaleDateString("id-ID");
-    const footerY = ((doc as any).lastAutoTable?.finalY ?? 120) + 20;
-    doc.setFont("helvetica", "italic");
-    doc.setFontSize(10);
-    doc.text(`Print Date : ${printedDate}`, 40, footerY);
-
-    doc.save("LAPORAN STOCK.pdf");
+    pdf.drawPdfPrintDate(doc);
+    pdf.savePdfFile(doc, "LAPORAN STOCK.pdf");
   };
 
   const exportExcel = async () => {
     const store = storesQ.data?.[0];
     const reportDateFrom = submittedFilter?.dateFrom ?? dateFrom;
     const reportDateTo = submittedFilter?.dateTo ?? dateTo;
-
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet("LAPORAN STOCK");
-
-    worksheet.columns = [
-      { width: 8 },
-      { width: 34 },
-      { width: 14 },
-      { width: 18 },
-      { width: 18 },
-      { width: 22 },
-    ];
-
-    worksheet.mergeCells("A1:F1");
-    worksheet.getCell("A1").value = "LAPORAN STOCK";
-    worksheet.getCell("A1").font = { bold: true, size: 16 };
-    worksheet.getCell("A1").alignment = { horizontal: "center", vertical: "middle" };
-
-    worksheet.mergeCells("A2:F2");
-    worksheet.getCell("A2").value = `Tanggal : ${reportDateFrom} s/d ${reportDateTo}`;
-    worksheet.getCell("A2").font = { bold: true, size: 12 };
-    worksheet.getCell("A2").alignment = { horizontal: "center", vertical: "middle" };
-
-    worksheet.mergeCells("A3:F3");
-    worksheet.getCell("A3").value = `${store?.nama_toko ?? "-"}`;
-    worksheet.getCell("A3").font = { bold: true, size: 12 };
-    worksheet.getCell("A3").alignment = { horizontal: "center", vertical: "middle" };
-
-    const headerRow = worksheet.addRow(["No", "Produk", "Stok", "Harga Grosir", "Harga Eceran", "Nilai Stok (Grosir)"]);
-    const headerRowNumber = headerRow.number;
-    headerRow.eachCell((cell) => {
-      cell.font = { bold: true };
-      cell.alignment = { horizontal: "center", vertical: "middle" };
-      cell.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FFE5E5E5" },
-      };
-      cell.border = {
-        top: { style: "thin", color: { argb: "FFBFBFBF" } },
-        left: { style: "thin", color: { argb: "FFBFBFBF" } },
-        bottom: { style: "thin", color: { argb: "FFBFBFBF" } },
-        right: { style: "thin", color: { argb: "FFBFBFBF" } },
-      };
+    await exportExcelWithWorker({
+      kind: "stock",
+      fileName: "LAPORAN STOCK.xlsx",
+      title: "LAPORAN STOCK",
+      dateFrom: reportDateFrom,
+      dateTo: reportDateTo,
+      storeName: store?.nama_toko,
+      items: filtered.map((item) => ({
+        name: item.name,
+        stock: item.stock,
+        wholesalePrice: item.wholesalePrice,
+        retailPrice: item.retailPrice,
+      })),
     });
-
-    filtered.forEach((item, index) => {
-      const row = worksheet.addRow([
-        index + 1,
-        item.name,
-        item.stock,
-        item.wholesalePrice,
-        item.retailPrice,
-        item.stock * item.wholesalePrice,
-      ]);
-      row.getCell(1).alignment = { horizontal: "center" };
-      row.getCell(3).alignment = { horizontal: "right" };
-      row.getCell(4).alignment = { horizontal: "right" };
-      row.getCell(5).alignment = { horizontal: "right" };
-      row.getCell(6).alignment = { horizontal: "right" };
-      row.getCell(4).numFmt = '"Rp" #,##0';
-      row.getCell(5).numFmt = '"Rp" #,##0';
-      row.getCell(6).numFmt = '"Rp" #,##0';
-      row.eachCell((cell) => {
-        cell.border = {
-          top: { style: "thin", color: { argb: "FFBFBFBF" } },
-          left: { style: "thin", color: { argb: "FFBFBFBF" } },
-          bottom: { style: "thin", color: { argb: "FFBFBFBF" } },
-          right: { style: "thin", color: { argb: "FFBFBFBF" } },
-        };
-      });
-    });
-
-    const totalStok = filtered.reduce((sum, item) => sum + item.stock, 0);
-    const totalHargaGrosir = filtered.reduce((sum, item) => sum + item.wholesalePrice, 0);
-    const totalHargaEceran = filtered.reduce((sum, item) => sum + item.retailPrice, 0);
-    const totalNilaiStokGrosir = filtered.reduce((sum, item) => sum + item.stock * item.wholesalePrice, 0);
-
-    const grandTotalRow = worksheet.addRow([
-      `GRAND TOTAL : ${totalItems}`,
-      "",
-      totalStok,
-      totalHargaGrosir,
-      totalHargaEceran,
-      totalNilaiStokGrosir,
-    ]);
-    worksheet.mergeCells(`A${grandTotalRow.number}:B${grandTotalRow.number}`);
-    grandTotalRow.getCell(1).font = { bold: true };
-    grandTotalRow.getCell(1).alignment = { horizontal: "left" };
-    grandTotalRow.getCell(3).alignment = { horizontal: "right" };
-    grandTotalRow.getCell(4).alignment = { horizontal: "right" };
-    grandTotalRow.getCell(5).alignment = { horizontal: "right" };
-    grandTotalRow.getCell(6).alignment = { horizontal: "right" };
-    grandTotalRow.getCell(3).font = { bold: true };
-    grandTotalRow.getCell(4).font = { bold: true };
-    grandTotalRow.getCell(5).font = { bold: true };
-    grandTotalRow.getCell(6).font = { bold: true };
-    grandTotalRow.getCell(4).numFmt = '"Rp" #,##0';
-    grandTotalRow.getCell(5).numFmt = '"Rp" #,##0';
-    grandTotalRow.getCell(6).numFmt = '"Rp" #,##0';
-    grandTotalRow.eachCell((cell) => {
-      cell.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FFF3F3F3" },
-      };
-      cell.border = {
-        top: { style: "thin", color: { argb: "FFBFBFBF" } },
-        left: { style: "thin", color: { argb: "FFBFBFBF" } },
-        bottom: { style: "thin", color: { argb: "FFBFBFBF" } },
-        right: { style: "thin", color: { argb: "FFBFBFBF" } },
-      };
-    });
-
-    const printDateRow = worksheet.addRow([`Print Date : ${new Date().toLocaleDateString("id-ID")}`]);
-    worksheet.mergeCells(`A${printDateRow.number}:F${printDateRow.number}`);
-    printDateRow.getCell(1).font = { italic: true, size: 10 };
-    printDateRow.getCell(1).alignment = { horizontal: "left" };
-
-    for (let i = 1; i <= 3; i += 1) {
-      worksheet.getRow(i).height = 22;
-    }
-    worksheet.getRow(headerRowNumber).height = 24;
-    worksheet.views = [{ state: "frozen", ySplit: headerRowNumber }];
-
-    const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "LAPORAN STOCK.xlsx";
-    link.click();
-    URL.revokeObjectURL(url);
   };
 
   return (
@@ -370,6 +216,7 @@ export default function StockReportPage() {
             {filterError}
           </div>
         )}
+        <TableFetchProgress loading={stockQ.isFetching && !stockQ.isLoading} />
 
         <div className="p-6">
           <div className="border border-border bg-muted/20">
@@ -378,7 +225,7 @@ export default function StockReportPage() {
                 <img src={searchDataIcon} alt="Cari data laporan" className="h-64 w-64 object-contain" />
                 <p>Silahkan cari data untuk menampilkan laporan</p>
               </div>
-            ) : stockQ.isLoading || stockQ.isFetching ? (
+            ) : stockQ.isLoading ? (
               <div className="p-6"><TableSkeleton rows={6} cols={5} /></div>
             ) : stockQ.isError || !stockQ.data ? (
               <div className="p-6"><ErrorState message="Gagal memuat laporan stock." onRetry={() => void stockQ.refetch()} /></div>
@@ -403,7 +250,7 @@ export default function StockReportPage() {
                   <TableBody>
                     {paginated.map((item) => (
                       <TableRow key={item.id}>
-                        <TableCell className="font-medium">{item.name}</TableCell>
+                        <TableCell className="font-medium">{(item.name ?? "").toUpperCase()}</TableCell>
                         <TableCell className="text-right tabular-nums">{formatNumber(item.stock)}</TableCell>
                         <TableCell className="text-right tabular-nums">{formatCurrency(item.wholesalePrice)}</TableCell>
                         <TableCell className="text-right tabular-nums">{formatCurrency(item.retailPrice)}</TableCell>
@@ -432,7 +279,7 @@ export default function StockReportPage() {
               <Button
                 type="button"
                 className="w-full rounded-none bg-red-600 text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-red-300 disabled:text-white/80"
-                onClick={exportPdf}
+                onClick={() => { void exportPdf(); }}
                 disabled={!canExport}
               >
                 Export PDF

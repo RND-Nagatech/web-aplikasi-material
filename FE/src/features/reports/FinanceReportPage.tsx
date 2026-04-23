@@ -9,21 +9,26 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { TableSkeleton } from "@/components/common/TableSkeleton";
+import { TableFetchProgress } from "@/components/common/TableFetchProgress";
 import { TablePagination } from "@/components/common/TablePagination";
 import { ErrorState } from "@/components/common/States";
 import { formatCurrency } from "@/lib/format";
 import { reportsService } from "@/services/reports";
 import { storesService } from "@/services/stores";
 import type { FinanceReportType } from "@/types";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import type { RowInput } from "jspdf-autotable";
-import ExcelJS from "exceljs";
+import { getPdfEngine } from "./export-engine/lazy";
+import { exportExcelWithWorker } from "./export-engine/excel-worker.client";
 import searchDataIcon from "../../../assets/cari data.svg";
 import emptyDataIcon from "../../../assets/empty.svg";
 
 const DEFAULT_PAGE_SIZE = 10;
 const TODAY = new Date().toISOString().slice(0, 10);
+type AutoTableDoc = {
+  lastAutoTable?: {
+    finalY?: number;
+  };
+};
 
 export default function FinanceReportPage() {
   const [dateFrom, setDateFrom] = useState(TODAY);
@@ -51,15 +56,15 @@ export default function FinanceReportPage() {
     queryFn: storesService.list,
   });
 
-  const items = financeQ.data?.items ?? [];
   const filtered = useMemo(() => {
+    const items = financeQ.data?.items ?? [];
     const q = search.trim().toLowerCase();
     if (!q) return items;
     return items.filter((it) =>
       (it.kategori ?? "").toLowerCase().includes(q)
       || (it.deskripsi ?? "").toLowerCase().includes(q)
     );
-  }, [items, search]);
+  }, [financeQ.data?.items, search]);
 
   const totalItems = filtered.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
@@ -106,7 +111,8 @@ export default function FinanceReportPage() {
     && !financeQ.isError
     && filtered.length > 0;
 
-  const exportPdf = () => {
+  const exportPdf = async () => {
+    const pdf = await getPdfEngine();
     const store = storesQ.data?.[0];
     const reportDateFrom = submittedFilter?.dateFrom ?? dateFrom;
     const reportDateTo = submittedFilter?.dateTo ?? dateTo;
@@ -121,21 +127,14 @@ export default function FinanceReportPage() {
       return parsed.toISOString().slice(0, 10);
     };
 
-    const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+    const doc = pdf.createLandscapePdf();
     const pageWidth = doc.internal.pageSize.getWidth();
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(18);
-    doc.text((store?.nama_toko ?? "-").toUpperCase(), 40, 50);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(11);
-    doc.text(`Alamat : ${(store?.alamat ?? "-").toUpperCase()}`, 40, 70);
-    doc.text(`No HP  : ${store?.no_hp ?? "-"}`, 40, 86);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(17);
-    doc.text(title, pageWidth - 40, 50, { align: "right" });
-    doc.setFontSize(13);
-    doc.text(`TANGGAL : ${reportDateFrom} s/d ${reportDateTo}`, pageWidth - 40, 72, { align: "right" });
+    pdf.drawStandardReportHeader(doc, {
+      store,
+      title,
+      dateFrom: reportDateFrom,
+      dateTo: reportDateTo,
+    });
 
     const summary = financeQ.data?.summary;
     const totalMasuk = summary?.totalUangMasuk ?? 0;
@@ -166,36 +165,31 @@ export default function FinanceReportPage() {
         : ["", "", "GRAND TOTAL", "", formatNumberId(totalMasuk), formatNumberId(totalKeluar)],
     );
 
-    autoTable(doc, {
-      startY: 110,
+    pdf.renderReportTablePdf(doc, {
       head,
       body,
-      theme: "plain",
-      styles: { font: "helvetica", fontSize: 10, cellPadding: 7 },
-      headStyles: { fillColor: [220, 220, 220], textColor: [20, 20, 20], fontStyle: "bold" },
-      columnStyles: reportType === "rekap"
-        ? {
-            0: { halign: "left", cellWidth: 430 },
-            1: { halign: "right", cellWidth: 166 },
-            2: { halign: "right", cellWidth: 166 },
-          }
-        : {
-            0: { halign: "left", cellWidth: 40 },
-            1: { halign: "left", cellWidth: 90 },
-            2: { halign: "left", cellWidth: 130 },
-            3: { halign: "left", cellWidth: 285 },
-            4: { halign: "right", cellWidth: 110 },
-            5: { halign: "right", cellWidth: 110 },
-          },
-      didParseCell: (data) => {
-        if (data.section === "body" && data.row.index === body.length - 1) {
-          data.cell.styles.fillColor = [220, 220, 220];
-          data.cell.styles.fontStyle = "bold";
-        }
+      autoTableOptions: {
+        theme: "plain",
+        styles: { fontSize: 10, cellPadding: 7 },
+        headStyles: { fillColor: [220, 220, 220], textColor: [20, 20, 20], fontStyle: "bold" },
+        columnStyles: reportType === "rekap"
+          ? {
+              0: { halign: "left", cellWidth: 430 },
+              1: { halign: "right", cellWidth: 166 },
+              2: { halign: "right", cellWidth: 166 },
+            }
+          : {
+              0: { halign: "left", cellWidth: 40 },
+              1: { halign: "left", cellWidth: 90 },
+              2: { halign: "left", cellWidth: 130 },
+              3: { halign: "left", cellWidth: 285 },
+              4: { halign: "right", cellWidth: 110 },
+              5: { halign: "right", cellWidth: 110 },
+            },
       },
     });
 
-    const summaryStartY = ((doc as any).lastAutoTable?.finalY ?? 120) + 14;
+    const summaryStartY = (((doc as unknown as AutoTableDoc).lastAutoTable?.finalY) ?? 120) + 14;
     const tableRightX = pageWidth - 40;
     const summaryValueX = tableRightX - 6;
     const summaryLabelX = summaryValueX - 170;
@@ -214,10 +208,12 @@ export default function FinanceReportPage() {
     doc.text(formatNumberId(summary?.saldoAkhir ?? 0), summaryValueX, summaryStartY + lineHeight * 3.35, { align: "right" });
 
     const footerY = summaryStartY + lineHeight * 4.2;
-    doc.setFontSize(10);
-    doc.text(`Print Date : ${new Date().toLocaleDateString("id-ID")}`, 40, footerY);
+    pdf.drawPdfPrintDate(doc, {
+      label: `Print Date : ${new Date().toLocaleDateString("id-ID")}`,
+      y: footerY,
+    });
     const pdfName = title.replace(/\s+/g, " ") + ".pdf";
-    doc.save(pdfName);
+    pdf.savePdfFile(doc, pdfName);
   };
 
   const exportExcel = async () => {
@@ -225,156 +221,28 @@ export default function FinanceReportPage() {
     const reportDateFrom = submittedFilter?.dateFrom ?? dateFrom;
     const reportDateTo = submittedFilter?.dateTo ?? dateTo;
     const title = reportType === "rekap" ? "LAPORAN KEUANGAN (REKAP)" : "LAPORAN KEUANGAN (DETAIL)";
-
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet(title);
-
-    worksheet.columns = reportType === "rekap"
-      ? [{ width: 46 }, { width: 30 }, { width: 32 }]
-      : [{ width: 36 }, { width: 58 }, { width: 26 }, { width: 28 }];
-
-    const endCol = reportType === "rekap" ? "C" : "D";
-    const tableHeaderFill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE5E5E5" } } as const;
-    const whiteFill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } } as const;
-    const tableBorder = {
-      top: { style: "thin", color: { argb: "FFBFBFBF" } },
-      left: { style: "thin", color: { argb: "FFBFBFBF" } },
-      bottom: { style: "thin", color: { argb: "FFBFBFBF" } },
-      right: { style: "thin", color: { argb: "FFBFBFBF" } },
-    } as const;
-    const moneyFmt = "#,##0";
-    const totalCols = reportType === "rekap" ? 3 : 4;
-
-    for (let rowIdx = 1; rowIdx <= 5; rowIdx += 1) {
-      worksheet.mergeCells(`A${rowIdx}:${endCol}${rowIdx}`);
-      const cell = worksheet.getCell(`A${rowIdx}`);
-      cell.fill = whiteFill;
-      cell.border = tableBorder;
-      cell.alignment = { horizontal: rowIdx === 1 ? "center" : "left", vertical: "middle" };
-      cell.font = { bold: true, size: rowIdx === 1 ? 17 : 12 };
-    }
-    worksheet.getCell("A1").value = title;
-    worksheet.getCell("A2").value = "Tanggal";
-    worksheet.getCell("A3").value = `${reportDateFrom} s/d ${reportDateTo}`;
-    worksheet.getCell("A4").value = `TOKO : ${(store?.nama_toko ?? "-").toUpperCase()}`;
-    worksheet.getCell("A5").value = `ALAMAT : ${(store?.alamat ?? "-").toUpperCase()}`;
-
-    worksheet.addRow([]);
-    const headerRowIndex = 7;
-    const headers = reportType === "rekap"
-      ? ["Kategori", "Uang Masuk", "Uang Keluar"]
-      : ["Kategori", "Deskripsi", "Uang Masuk", "Uang Keluar"];
-    const headerRow = worksheet.getRow(headerRowIndex);
-    headers.forEach((value, idx) => {
-      headerRow.getCell(idx + 1).value = value;
+    await exportExcelWithWorker({
+      kind: "finance",
+      fileName: `${title}.xlsx`,
+      title,
+      dateFrom: reportDateFrom,
+      dateTo: reportDateTo,
+      storeName: store?.nama_toko,
+      storeAddress: store?.alamat,
+      reportType,
+      items: filtered.map((item) => ({
+        kategori: item.kategori,
+        deskripsi: item.deskripsi,
+        uangMasuk: item.uangMasuk,
+        uangKeluar: item.uangKeluar,
+      })),
+      summary: {
+        saldoAwal: financeQ.data?.summary.saldoAwal ?? 0,
+        totalUangMasuk: financeQ.data?.summary.totalUangMasuk ?? 0,
+        totalUangKeluar: financeQ.data?.summary.totalUangKeluar ?? 0,
+        saldoAkhir: financeQ.data?.summary.saldoAkhir ?? 0,
+      },
     });
-    headerRow.eachCell((cell) => {
-      cell.font = { bold: true, size: 12 };
-      const isMoneyHeader = reportType === "rekap" ? cell.col >= 2 : cell.col >= 3;
-      cell.alignment = { horizontal: isMoneyHeader ? "right" : "left", vertical: "middle" };
-      cell.fill = tableHeaderFill;
-      cell.border = tableBorder;
-    });
-    headerRow.height = 30;
-
-    let currentRow = headerRowIndex + 1;
-    filtered.forEach((item) => {
-      const row = worksheet.getRow(currentRow);
-      const values = reportType === "rekap"
-        ? [item.kategori.toUpperCase(), item.uangMasuk, item.uangKeluar]
-        : [item.kategori.toUpperCase(), item.deskripsi, item.uangMasuk, item.uangKeluar];
-      values.forEach((value, idx) => {
-        row.getCell(idx + 1).value = value;
-      });
-      const moneyStartCol = reportType === "rekap" ? 2 : 3;
-      row.getCell(moneyStartCol).alignment = { horizontal: "right" };
-      row.getCell(moneyStartCol + 1).alignment = { horizontal: "right" };
-      row.getCell(moneyStartCol).numFmt = moneyFmt;
-      row.getCell(moneyStartCol + 1).numFmt = moneyFmt;
-      row.eachCell((cell) => {
-        cell.border = tableBorder;
-        cell.alignment = { ...(cell.alignment ?? {}), vertical: "middle" };
-      });
-      row.height = 30;
-      currentRow += 1;
-    });
-
-    const summary = financeQ.data?.summary;
-    const totalRow = worksheet.getRow(currentRow);
-    if (reportType === "detail") {
-      worksheet.mergeCells(`A${currentRow}:B${currentRow}`);
-    }
-    totalRow.getCell(1).value = "GRAND TOTAL";
-    totalRow.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
-    if (reportType === "rekap") {
-      totalRow.getCell(2).value = summary?.totalUangMasuk ?? 0;
-      totalRow.getCell(3).value = summary?.totalUangKeluar ?? 0;
-      totalRow.getCell(2).numFmt = moneyFmt;
-      totalRow.getCell(3).numFmt = moneyFmt;
-      totalRow.getCell(2).alignment = { horizontal: "right", vertical: "middle" };
-      totalRow.getCell(3).alignment = { horizontal: "right", vertical: "middle" };
-    } else {
-      totalRow.getCell(3).value = summary?.totalUangMasuk ?? 0;
-      totalRow.getCell(4).value = summary?.totalUangKeluar ?? 0;
-      totalRow.getCell(3).numFmt = moneyFmt;
-      totalRow.getCell(4).numFmt = moneyFmt;
-      totalRow.getCell(3).alignment = { horizontal: "right", vertical: "middle" };
-      totalRow.getCell(4).alignment = { horizontal: "right", vertical: "middle" };
-    }
-    for (let col = 1; col <= totalCols; col += 1) {
-      const cell = totalRow.getCell(col);
-      cell.font = { bold: true, size: 12 };
-      cell.fill = tableHeaderFill;
-      cell.border = tableBorder;
-    }
-    totalRow.height = 30;
-
-    const summaryStartRow = currentRow + 2;
-    const summaryLabelCol = reportType === "rekap" ? 2 : 3;
-    const summaryValueCol = reportType === "rekap" ? 3 : 4;
-    const summaryRows = [
-      ["Saldo Awal", summary?.saldoAwal ?? 0],
-      ["Uang Masuk", summary?.totalUangMasuk ?? 0],
-      ["Uang Keluar", summary?.totalUangKeluar ?? 0],
-      ["Saldo Akhir", summary?.saldoAkhir ?? 0],
-    ] as const;
-
-    summaryRows.forEach(([label, value], idx) => {
-      const rowNumber = summaryStartRow + idx;
-      if (reportType === "detail") {
-        worksheet.mergeCells(`A${rowNumber}:B${rowNumber}`);
-      }
-      const row = worksheet.getRow(rowNumber);
-      for (let col = 1; col <= totalCols; col += 1) {
-        const cell = row.getCell(col);
-        cell.fill = tableHeaderFill;
-        cell.border = tableBorder;
-      }
-      row.getCell(summaryLabelCol).value = label;
-      row.getCell(summaryValueCol).value = value;
-      row.getCell(summaryLabelCol).font = { bold: true, size: 12 };
-      row.getCell(summaryLabelCol).alignment = { horizontal: "right", vertical: "middle" };
-      row.getCell(summaryValueCol).font = { bold: true, size: 12 };
-      row.getCell(summaryValueCol).alignment = { horizontal: "right", vertical: "middle" };
-      row.getCell(summaryValueCol).numFmt = moneyFmt;
-      row.height = 30;
-    });
-
-    const printDateRow = worksheet.getRow(summaryStartRow + summaryRows.length + 1);
-    printDateRow.getCell(1).value = `Print Date : ${new Date().toLocaleDateString("id-ID")}`;
-    printDateRow.getCell(1).font = { italic: true, size: 12 };
-
-    const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    const xlsxName = title.replace(/\s+/g, " ") + ".xlsx";
-    link.download = xlsxName;
-    link.click();
-    URL.revokeObjectURL(url);
   };
 
   return (
@@ -415,6 +283,7 @@ export default function FinanceReportPage() {
         {filterError && (
           <div className="border-b border-border bg-background px-6 pb-4 text-sm text-destructive">{filterError}</div>
         )}
+        <TableFetchProgress loading={financeQ.isFetching && !financeQ.isLoading} />
 
         <div className="p-6">
           <div className="border border-border bg-muted/20">
@@ -423,7 +292,7 @@ export default function FinanceReportPage() {
                 <img src={searchDataIcon} alt="Cari data laporan" className="h-64 w-64 object-contain" />
                 <p>Silahkan cari data untuk menampilkan laporan</p>
               </div>
-            ) : financeQ.isLoading || financeQ.isFetching ? (
+            ) : financeQ.isLoading ? (
               <div className="p-6"><TableSkeleton rows={6} cols={reportType === "rekap" ? 3 : 4} /></div>
             ) : financeQ.isError || !financeQ.data ? (
               <div className="p-6"><ErrorState message="Gagal memuat laporan keuangan." onRetry={() => void financeQ.refetch()} /></div>
@@ -447,7 +316,7 @@ export default function FinanceReportPage() {
                   <TableBody>
                     {paginated.map((item, idx) => (
                       <TableRow key={`${item.kategori}-${item.deskripsi}-${idx}`}>
-                        <TableCell className="font-medium">{item.kategori}</TableCell>
+                        <TableCell className="font-medium">{(item.kategori ?? "").toUpperCase()}</TableCell>
                         {reportType === "detail" && <TableCell className="text-muted-foreground">{item.deskripsi || "-"}</TableCell>}
                         <TableCell className="text-right tabular-nums">{formatCurrency(item.uangMasuk)}</TableCell>
                         <TableCell className="text-right tabular-nums">{formatCurrency(item.uangKeluar)}</TableCell>
@@ -485,7 +354,7 @@ export default function FinanceReportPage() {
                   type="button"
                   className="w-full rounded-none bg-red-600 text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-red-300 disabled:text-white/80"
                   disabled={!canExport}
-                  onClick={exportPdf}
+                  onClick={() => { void exportPdf(); }}
                 >
                   Export PDF
                 </Button>

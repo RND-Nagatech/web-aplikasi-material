@@ -10,6 +10,11 @@ type TopbarProps = {
 export function Topbar({ onOpenMobileSidebar }: TopbarProps) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const systemDateLabel = new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  }).format(new Date());
 
   return (
     <header className="flex h-14 items-center justify-between border-b border-border bg-background/80 px-4 backdrop-blur sm:px-6">
@@ -28,7 +33,13 @@ export function Topbar({ onOpenMobileSidebar }: TopbarProps) {
         Selamat datang, <span className="font-medium text-foreground">{user?.name ?? "Admin"}</span>
         </div>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 sm:gap-3">
+        <div className="hidden text-xs text-muted-foreground sm:block">
+          Tanggal Sistem : <span className="font-medium text-foreground">{systemDateLabel}</span>
+        </div>
+        <div className="text-xs text-muted-foreground sm:hidden">
+          <span className="font-medium text-foreground">{systemDateLabel}</span>
+        </div>
         <Button
           variant="ghost"
           size="sm"

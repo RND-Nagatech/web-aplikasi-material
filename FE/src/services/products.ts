@@ -27,7 +27,7 @@ const mapProduct = (item: ApiProduct): Product => ({
 });
 
 const toApiInput = (input: ProductInput) => ({
-  nama_produk: input.name,
+  nama_produk: input.name.trim().toUpperCase(),
   stock_on_hand: input.stock,
   harga_grosir: input.wholesalePrice,
   harga_ecer: input.retailPrice,
