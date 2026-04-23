@@ -12,7 +12,7 @@ import { TableSkeleton } from "@/components/common/TableSkeleton";
 import { TableFetchProgress } from "@/components/common/TableFetchProgress";
 import { TablePagination } from "@/components/common/TablePagination";
 import { EmptyState, ErrorState } from "@/components/common/States";
-import { formatCurrency, formatDate, formatNumber, getTodayInputDate } from "@/lib/format";
+import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
 import { reportsService } from "@/services/reports";
 import { storesService } from "@/services/stores";
 import type { RowInput } from "jspdf-autotable";
@@ -22,7 +22,7 @@ import searchDataIcon from "../../../assets/cari data.svg";
 import emptyDataIcon from "../../../assets/empty.svg";
 
 const DEFAULT_PAGE_SIZE = 10;
-const TODAY = getTodayInputDate();
+const TODAY = new Date().toISOString().slice(0, 10);
 
 export default function DebtReportPage() {
   const [dateFrom, setDateFrom] = useState(TODAY);
@@ -77,7 +77,10 @@ export default function DebtReportPage() {
     }
 
     setFilterError("");
-    const nextFilter = { dateFrom, dateTo };
+    const toUtcStart = (d: string) => new Date(`${d}T00:00:00`).toISOString();
+    const toUtcEnd = (d: string) => new Date(`${d}T23:59:59.999`).toISOString();
+
+    const nextFilter = { dateFrom: toUtcStart(dateFrom), dateTo: toUtcEnd(dateTo) };
 
     const isSameFilter = submittedFilter?.dateFrom === nextFilter.dateFrom && submittedFilter?.dateTo === nextFilter.dateTo;
     if (isSameFilter) {
@@ -93,9 +96,8 @@ export default function DebtReportPage() {
   const exportPdf = async () => {
     const pdf = await getPdfEngine();
     const store = storesQ.data?.[0];
-    const reportDateFrom = submittedFilter?.dateFrom ?? dateFrom;
-    const reportDateTo = submittedFilter?.dateTo ?? dateTo;
-    const pdfSideInset = 34;
+    const reportDateFrom = (submittedFilter?.dateFrom ?? dateFrom).slice(0, 10);
+    const reportDateTo = (submittedFilter?.dateTo ?? dateTo).slice(0, 10);
 
     const doc = pdf.createLandscapePdf();
     pdf.drawStandardReportHeader(doc, {
@@ -103,8 +105,6 @@ export default function DebtReportPage() {
       title: "LAPORAN PIUTANG",
       dateFrom: reportDateFrom,
       dateTo: reportDateTo,
-      leftInset: pdfSideInset,
-      rightInset: pdfSideInset,
     });
 
     const tableBody: RowInput[] = filtered.map((item, index) => [
@@ -136,21 +136,13 @@ export default function DebtReportPage() {
       head: [["No", "No Faktur", "Pelanggan", "Kode Customer", "Tanggal", "Total", "Dibayar", "Kembalian", "Sisa"]],
       body: tableBody,
       autoTableOptions: {
-        margin: { left: pdfSideInset, right: pdfSideInset },
-        styles: {
-          fontSize: 9,
-          cellPadding: 4,
-        },
         columnStyles: {
-          0: { halign: "center", cellWidth: 20 }, // No (diperkecil)
-          1: { halign: "left", cellWidth: 92 },
-          2: { halign: "left", cellWidth: 110 }, // Pelanggan (dipanjangkan)
-          3: { halign: "left", cellWidth: 72 },
-          4: { halign: "center", cellWidth: 68 }, // Tanggal (diperkecil)
-          5: { halign: "right", cellWidth: 103 }, // Nominal diperlebar agar sejajar kanan header
-          6: { halign: "right", cellWidth: 103 },
-          7: { halign: "right", cellWidth: 103 },
-          8: { halign: "right", cellWidth: 103 },
+          0: { halign: "center", cellWidth: 56 },
+          4: { halign: "center", cellWidth: 100 },
+          5: { halign: "right", cellWidth: 110 },
+          6: { halign: "right", cellWidth: 110 },
+          7: { halign: "right", cellWidth: 110 },
+          8: { halign: "right", cellWidth: 110 },
         },
       },
     });
@@ -161,8 +153,8 @@ export default function DebtReportPage() {
 
   const exportExcel = async () => {
     const store = storesQ.data?.[0];
-    const reportDateFrom = submittedFilter?.dateFrom ?? dateFrom;
-    const reportDateTo = submittedFilter?.dateTo ?? dateTo;
+    const reportDateFrom = (submittedFilter?.dateFrom ?? dateFrom).slice(0, 10);
+    const reportDateTo = (submittedFilter?.dateTo ?? dateTo).slice(0, 10);
     await exportExcelWithWorker({
       kind: "debt",
       fileName: "LAPORAN PIUTANG.xlsx",
@@ -216,13 +208,6 @@ export default function DebtReportPage() {
 
         <div className="p-4 sm:p-6">
           <div className="border border-border bg-muted/20">
-            <div className="mb-3 grid gap-3 md:grid-cols-4">
-              {/* summary boxes intentionally commented per styling guide */}
-              {/* <SummaryBox label="Total record" value={formatNumber(debtQ.data?.summary.totalRecords ?? 0)} /> */}
-              {/* <SummaryBox label="Total piutang" value={formatCurrency(debtQ.data?.summary.totalDebt ?? 0)} /> */}
-              {/* <SummaryBox label="Sudah dibayar" value={formatCurrency(debtQ.data?.summary.totalPaid ?? 0)} /> */}
-              {/* <SummaryBox label="Sisa piutang" value={formatCurrency(debtQ.data?.summary.totalOutstanding ?? 0)} /> */}
-            </div>
 
             {submittedFilter === null ? (
               <div className="flex flex-col items-center gap-3 px-6 py-10 text-center text-sm text-muted-foreground">

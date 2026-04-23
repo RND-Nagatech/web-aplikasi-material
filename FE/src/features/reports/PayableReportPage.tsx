@@ -216,13 +216,6 @@ export default function PayableReportPage() {
 
         <div className="p-4 sm:p-6">
           <div className="border border-border bg-muted/20">
-            <div className="mb-3 grid gap-3 md:grid-cols-4">
-              {/* summary boxes intentionally commented per styling guide */}
-              {/* <SummaryBox label="Total record" value={formatNumber(payableQ.data?.summary.totalRecords ?? 0)} /> */}
-              {/* <SummaryBox label="Total hutang" value={formatCurrency(payableQ.data?.summary.totalPayable ?? 0)} /> */}
-              {/* <SummaryBox label="Sudah dibayar" value={formatCurrency(payableQ.data?.summary.totalPaid ?? 0)} /> */}
-              {/* <SummaryBox label="Sisa hutang" value={formatCurrency(payableQ.data?.summary.totalOutstanding ?? 0)} /> */}
-            </div>
 
             {submittedFilter === null ? (
               <div className="flex flex-col items-center gap-3 px-6 py-10 text-center text-sm text-muted-foreground">
