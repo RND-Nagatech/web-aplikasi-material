@@ -93,7 +93,16 @@ export const renderReportTablePdf = (
 
 export const drawPdfPrintDate = (doc: jsPDF, options?: { label?: string; y?: number }): void => {
   const label = options?.label ?? `Print Date : ${new Date().toLocaleDateString("id-ID")}`;
-  const footerY = options?.y ?? (((doc as AutoTableDoc).lastAutoTable?.finalY ?? 120) + 20);
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const requestedY = options?.y ?? (((doc as AutoTableDoc).lastAutoTable?.finalY ?? 120) + 20);
+  const bottomSafePadding = 16;
+  let footerY = requestedY;
+
+  if (footerY > pageHeight - bottomSafePadding) {
+    doc.addPage();
+    footerY = 40;
+  }
+
   doc.setFont("helvetica", "italic");
   doc.setFontSize(10);
   doc.text(label, 40, footerY);

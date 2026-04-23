@@ -58,13 +58,21 @@ export default function FinanceReportPage() {
 
   const filtered = useMemo(() => {
     const items = financeQ.data?.items ?? [];
+    const normalized = reportType === "detail"
+      ? items.filter((it) => {
+          const kategori = (it.kategori ?? "").toUpperCase();
+          const isSaleOrPurchase = kategori === "PENJUALAN" || kategori === "PEMBELIAN";
+          const isZeroNominal = (it.uangMasuk ?? 0) === 0 && (it.uangKeluar ?? 0) === 0;
+          return !(isSaleOrPurchase && isZeroNominal);
+        })
+      : items;
     const q = search.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((it) =>
+    if (!q) return normalized;
+    return normalized.filter((it) =>
       (it.kategori ?? "").toLowerCase().includes(q)
       || (it.deskripsi ?? "").toLowerCase().includes(q)
     );
-  }, [financeQ.data?.items, search]);
+  }, [financeQ.data?.items, reportType, search]);
 
   const totalItems = filtered.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
@@ -189,25 +197,39 @@ export default function FinanceReportPage() {
       },
     });
 
+    const pageHeight = doc.internal.pageSize.getHeight();
     const summaryStartY = (((doc as unknown as AutoTableDoc).lastAutoTable?.finalY) ?? 120) + 14;
     const tableRightX = pageWidth - 40;
     const summaryValueX = tableRightX - 6;
     const summaryLabelX = summaryValueX - 170;
     const lineHeight = 22;
+    const summaryBlockHeight = lineHeight * 4.2;
+    const bottomSafePadding = 24;
+    let safeSummaryStartY = summaryStartY;
+
+    if (safeSummaryStartY + summaryBlockHeight > pageHeight - bottomSafePadding) {
+      doc.addPage();
+      safeSummaryStartY = 56;
+    }
+
     doc.setFont("helvetica", "italic");
     doc.setFontSize(9);
-    doc.text("Saldo Awal :", summaryLabelX, summaryStartY);
-    doc.text(formatNumberId(summary?.saldoAwal ?? 0), summaryValueX, summaryStartY, { align: "right" });
-    doc.text("Uang Masuk :", summaryLabelX, summaryStartY + lineHeight);
-    doc.text(formatNumberId(summary?.totalUangMasuk ?? 0), summaryValueX, summaryStartY + lineHeight, { align: "right" });
-    doc.text("Uang Keluar :", summaryLabelX, summaryStartY + lineHeight * 2);
-    doc.text(formatNumberId(summary?.totalUangKeluar ?? 0), summaryValueX, summaryStartY + lineHeight * 2, { align: "right" });
+    doc.text("Saldo Awal :", summaryLabelX, safeSummaryStartY);
+    doc.text(formatNumberId(summary?.saldoAwal ?? 0), summaryValueX, safeSummaryStartY, { align: "right" });
+    doc.text("Uang Masuk :", summaryLabelX, safeSummaryStartY + lineHeight);
+    doc.text(formatNumberId(summary?.totalUangMasuk ?? 0), summaryValueX, safeSummaryStartY + lineHeight, { align: "right" });
+    doc.text("Uang Keluar :", summaryLabelX, safeSummaryStartY + lineHeight * 2);
+    doc.text(formatNumberId(summary?.totalUangKeluar ?? 0), summaryValueX, safeSummaryStartY + lineHeight * 2, { align: "right" });
     doc.setLineWidth(0.8);
-    doc.line(summaryLabelX, summaryStartY + lineHeight * 2.45, summaryValueX, summaryStartY + lineHeight * 2.45);
-    doc.text("Saldo Akhir :", summaryLabelX, summaryStartY + lineHeight * 3.35);
-    doc.text(formatNumberId(summary?.saldoAkhir ?? 0), summaryValueX, summaryStartY + lineHeight * 3.35, { align: "right" });
+    doc.line(summaryLabelX, safeSummaryStartY + lineHeight * 2.45, summaryValueX, safeSummaryStartY + lineHeight * 2.45);
+    doc.text("Saldo Akhir :", summaryLabelX, safeSummaryStartY + lineHeight * 3.35);
+    doc.text(formatNumberId(summary?.saldoAkhir ?? 0), summaryValueX, safeSummaryStartY + lineHeight * 3.35, { align: "right" });
 
-    const footerY = summaryStartY + lineHeight * 4.2;
+    let footerY = safeSummaryStartY + lineHeight * 4.2;
+    if (footerY > pageHeight - 12) {
+      doc.addPage();
+      footerY = 40;
+    }
     pdf.drawPdfPrintDate(doc, {
       label: `Print Date : ${new Date().toLocaleDateString("id-ID")}`,
       y: footerY,
